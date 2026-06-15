@@ -1,0 +1,4 @@
+pytest>=8,<10
+bandit>=1.8,<2
+pip-audit>=2.7,<3
+pyinstaller>=6,<7

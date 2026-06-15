@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Build artifacts
+build/
+dist/
+*.spec
+*.exe
+*.msi
+*.zip
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local application data
+.llm_assistant/
+sessions/
+backups/
+*.session.json
+
+# Models and large files
+*.gguf
+*.safetensors
+*.bin
+*.onnx

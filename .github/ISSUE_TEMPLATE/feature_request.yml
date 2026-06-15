@@ -1,0 +1,30 @@
+name: Feature request
+description: Предложить улучшение
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую проблему решает функция?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Предлагаемое решение
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Раздел
+      options:
+        - Интерфейс
+        - LLM / серверы
+        - Контекст проекта
+        - Сессии
+        - Безопасность
+        - Веб-поиск
+        - Сборка EXE
+        - Другое
