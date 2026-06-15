@@ -1,4 +1,4 @@
-
+"""Точка запуска LLM Assistant v1.01."""
 
 from llm_assistant.app import LLMAssistant
 from llm_assistant.common import HAS_DND, TkinterDnD, tk
