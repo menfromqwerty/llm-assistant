@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from llm_assistant.app import LLMAssistant
 from llm_assistant.common import DEFAULT_MODEL_NAME
 
+
 def test_class_assembly() -> None:
     assert DEFAULT_MODEL_NAME == "qwen/qwen3-coder-30b"
     assert LLMAssistant._tok("12345678") == 2
@@ -19,8 +20,13 @@ def test_class_assembly() -> None:
         "_build_file_context",
         "_preview_context_selection",
         "_select_all_context_files",
+        "_stop_generation",
+        "_set_generation_controls",
+        "_send_or_stop",
+        "_on_escape_generation",
     ):
         assert hasattr(LLMAssistant, method), method
+
 
 def test_smart_context() -> None:
     with TemporaryDirectory() as directory:
@@ -76,6 +82,7 @@ def test_smart_context() -> None:
         assert [item["name"] for item in selected_summary["included"]] == [
             "unrelated.py"
         ]
+
 
 if __name__ == "__main__":
     test_class_assembly()

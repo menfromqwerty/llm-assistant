@@ -8,6 +8,7 @@ from llm_assistant.file_manager import FileManagerMixin
 from llm_assistant.sessions import SessionMixin
 from llm_assistant.web_search import WebSearchMixin
 
+
 class Var:
     def __init__(self, value):
         self.value = value
@@ -18,8 +19,10 @@ class Var:
     def set(self, value):
         self.value = value
 
+
 class ZipDummy(FileManagerMixin):
     pass
+
 
 class SessionDummy(SessionMixin):
     def __init__(self):
@@ -49,6 +52,7 @@ class SessionDummy(SessionMixin):
     def _update_session_ui(self):
         pass
 
+
 def test_zip_slip_is_blocked():
     with TemporaryDirectory() as tmp:
         base = Path(tmp)
@@ -68,6 +72,7 @@ def test_zip_slip_is_blocked():
                 raise AssertionError("Zip Slip archive was accepted")
         assert not (base / "escape.py").exists()
 
+
 def test_safe_zip_filters_binary_files():
     with TemporaryDirectory() as tmp:
         base = Path(tmp)
@@ -86,6 +91,7 @@ def test_safe_zip_filters_binary_files():
         ]
         assert not (destination / "bin/tool.exe").exists()
 
+
 def test_api_keys_are_not_written_to_session():
     with TemporaryDirectory() as tmp:
         app = SessionDummy()
@@ -95,6 +101,7 @@ def test_api_keys_are_not_written_to_session():
         assert "api_keys" not in data
         assert "SECRET_SHOULD_NOT_BE_SAVED" not in json.dumps(data)
         assert data["language_mode"] == "English + Русский"
+
 
 def test_web_loader_blocks_loopback_and_allows_public_ip():
     loopback = [(2, 1, 6, "", ("127.0.0.1", 80))]

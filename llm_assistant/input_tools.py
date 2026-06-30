@@ -3,12 +3,14 @@
 Модуль выделен из монолитного файла v9 для удобства сопровождения.
 """
 
-from .common import *
+from .common import *  # noqa: F401,F403
+
 
 class InputToolsMixin:
     def _setup_dnd(self):
         """Настройка drag-and-drop через tkinterdnd2 или Windows/X11 fallback."""
         if HAS_DND:
+            # tkinterdnd2 — кросс-платформенный DnD
             try:
                 self.input_text.drop_target_register(DND_FILES)
                 self.input_text.dnd_bind("<<Drop>>",     self._on_dnd_drop)
@@ -20,6 +22,7 @@ class InputToolsMixin:
             except Exception:
                 pass
 
+        # Fallback: Windows нативный DnD через win32
         if sys.platform == "win32":
             try:
                 self._setup_win32_dnd()
@@ -27,6 +30,7 @@ class InputToolsMixin:
             except Exception:
                 pass
 
+        # Если ничего не работает — просто показываем подсказку
         if hasattr(self, "_status"):
             self._status.config(
                 text="ℹ️ Для DnD установи: pip install tkinterdnd2  (сейчас используй кнопку 📎)"
@@ -36,9 +40,12 @@ class InputToolsMixin:
         """Windows-нативный drag-and-drop через ctypes (без доп. зависимостей)."""
         import ctypes
         import ctypes.wintypes
+        # Регистрируем окно как drop target через OleInitialize
+        # Упрощённый вариант: перехватываем WM_DROPFILES
         hwnd = self.input_text.winfo_id()
         ctypes.windll.shell32.DragAcceptFiles(hwnd, True)
-        self.input_text.bind("<Configure>", lambda e: None)
+        self.input_text.bind("<Configure>", lambda e: None)  # force window creation
+        # Привязываем через Tcl/Tk event
         self.root.bind("<<Win32Drop>>", self._on_win32_drop)
 
     def _on_dnd_enter(self, event):
@@ -55,6 +62,7 @@ class InputToolsMixin:
         """Обработка брошенных файлов (tkinterdnd2)."""
         self.input_text.config(bg=self.C["bg3"], relief=tk.FLAT)
         self._dnd_active = False
+        # event.data может содержать один или несколько путей в {}
         raw   = event.data.strip()
         paths = self._parse_dnd_paths(raw)
         for path in paths:
@@ -62,12 +70,14 @@ class InputToolsMixin:
 
     def _on_win32_drop(self, event):
         """Windows WM_DROPFILES fallback."""
-        pass
+        pass  # реализуется при наличии win32api
 
     def _parse_dnd_paths(self, raw: str) -> List[str]:
         """Разобрать строку путей из DnD события."""
+        # tkinterdnd2 возвращает {путь1} {путь2} или просто путь
         paths = []
         if raw.startswith("{"):
+            # Формат: {/path/to/file1} {/path/to/file2}
             for m in re.finditer(r'\{([^}]+)\}', raw):
                 paths.append(m.group(1))
         else:
@@ -81,12 +91,15 @@ class InputToolsMixin:
             return
 
         if p.suffix.lower() == ".zip":
+            # ZIP → автораспаковать в проект
             self._add_msg("system", f"📦 Обнаружен ZIP: {p.name} — распаковываю...")
             self._set_phase(1, 3, f"Распаковка {p.name}...", spin=True)
             threading.Thread(target=self._zip_thread, args=(str(p),), daemon=True).start()
         elif p.is_file():
+            # Текстовый файл → вставить содержимое в поле ввода
             self._insert_path_to_input(p)
         elif p.is_dir():
+            # Папка → загрузить как проект
             self._add_msg("system", f"📂 Папка: {p.name} — загружаю файлы...")
             self._set_phase(1, 2, f"Загрузка папки {p.name}...", spin=True)
             threading.Thread(target=self._folder_thread, args=(str(p),), daemon=True).start()
@@ -112,6 +125,7 @@ class InputToolsMixin:
         self.input_text.see(tk.END)
         self._status.config(text=f"📎 Вставлен {p.name}  (~{tok} токенов)")
 
+        # Также добавить в список файлов
         self._add_file(p.name, str(p))
 
     def _insert_file_to_input(self):
@@ -159,8 +173,10 @@ class InputToolsMixin:
         """
         raw = self.input_text.get("1.0", tk.END)
 
+        # Заменить \r\n и \r на \n
         text = raw.replace("\r\n", "\n").replace("\r", "\n")
 
+        # Обработать блоки кода отдельно, текст вне блоков — отдельно
         result_parts = []
         in_code = False
         code_buf = []
@@ -169,6 +185,7 @@ class InputToolsMixin:
         for line in text.split("\n"):
             if line.strip().startswith("```"):
                 if not in_code:
+                    # Начало блока: нормализуем накопленный текст
                     if text_buf:
                         normalized_text = self._normalize_text_block("\n".join(text_buf))
                         result_parts.append(normalized_text)
@@ -176,6 +193,7 @@ class InputToolsMixin:
                     in_code = True
                     code_buf = [line]
                 else:
+                    # Конец блока: нормализуем код
                     code_buf.append(line)
                     normalized_code = self._normalize_code_block(code_buf)
                     result_parts.append(normalized_code)
@@ -186,6 +204,7 @@ class InputToolsMixin:
             else:
                 text_buf.append(line)
 
+        # Остатки
         if code_buf:
             result_parts.append(self._normalize_code_block(code_buf))
         if text_buf:
@@ -202,18 +221,20 @@ class InputToolsMixin:
         """Нормализовать код внутри ``` блока."""
         if not lines:
             return ""
-        header = lines[0]
+        header = lines[0]  # строка ```python
         if len(lines) < 2:
             return header
         code_lines = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
         footer     = lines[-1]  if lines[-1].strip() == "```" else "```"
 
+        # Заменить табы на 4 пробела
         clean = []
         for line in code_lines:
             line = line.replace("\t", "    ")
-            line = line.rstrip()
+            line = line.rstrip()  # убрать trailing spaces
             clean.append(line)
 
+        # Убрать >2 пустых строк подряд
         result = []
         empty_count = 0
         for line in clean:
@@ -230,7 +251,9 @@ class InputToolsMixin:
     def _normalize_text_block(self, text: str) -> str:
         """Нормализовать обычный текст (не код)."""
         lines = text.split("\n")
+        # Убрать trailing spaces
         lines = [l.rstrip() for l in lines]
+        # Убрать >2 пустых строк подряд
         result = []
         empty = 0
         for line in lines:
@@ -248,11 +271,12 @@ class InputToolsMixin:
         n = simpledialog.askinteger("Обрезать токены",
                                     "Максимум токенов в поле ввода:",
                                     initialvalue=2000, minvalue=100,
-                                    maxvalue=CONTEXT_BUDGET,
+                                    maxvalue=self._effective_input_budget() if hasattr(self, "_effective_input_budget") else CONTEXT_BUDGET,
                                     parent=self.root)
         if not n:
             return
         text = self.input_text.get("1.0", tk.END)
+        # Обрезаем по символам (4 символа ≈ 1 токен)
         limit = n * 4
         if len(text) > limit:
             text = text[:limit] + f"\n\n... [обрезано до ~{n} токенов]"

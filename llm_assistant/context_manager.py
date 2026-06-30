@@ -1,6 +1,7 @@
 """Умный выбор файлов и построение ограниченного контекста проекта."""
 
-from .common import *
+from .common import *  # noqa: F401,F403
+
 
 class ContextManagerMixin:
     CONTEXT_MODE_LABELS = {
@@ -33,9 +34,14 @@ class ContextManagerMixin:
             budget = int(self._file_context_budget_var.get())
         except Exception:
             budget = 32768
+        context_cap = (
+            self._effective_input_budget()
+            if hasattr(self, "_effective_input_budget")
+            else CONTEXT_BUDGET
+        )
         return {
             "mode": self._context_mode_var.get(),
-            "budget": max(1000, min(budget, CONTEXT_BUDGET)),
+            "budget": max(1000, min(budget, context_cap)),
             "selected_files": [
                 name
                 for name, selected in self._file_context_selected.items()
@@ -176,6 +182,7 @@ class ContextManagerMixin:
                 ),
             )
 
+        # Авто: ручные отметки являются закреплёнными, затем идёт релевантность.
         by_stem: Dict[str, List[Dict[str, object]]] = {}
         for item in candidates:
             stem = Path(str(item["name"])).stem.lower()
@@ -203,6 +210,8 @@ class ContextManagerMixin:
             if item["pinned"] or int(item["score"]) > 0
         ]
 
+        # При общем запросе без ключевых совпадений всё равно берём точки входа
+        # и несколько небольших файлов, а не весь проект.
         if not relevant:
             entries = [
                 item for item in candidates
@@ -244,6 +253,7 @@ class ContextManagerMixin:
                 hit_indexes.append(index)
 
         if not hit_indexes:
+            # Без совпадений оставляем начало и объявления функций/классов.
             hit_indexes = [0]
             for index, line in enumerate(lines):
                 stripped = line.lstrip()

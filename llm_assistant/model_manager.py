@@ -3,7 +3,8 @@
 Модуль выделен из модульной версии проекта для удобства сопровождения.
 """
 
-from .common import *
+from .common import *  # noqa: F401,F403
+
 
 class ModelManagerMixin:
     @staticmethod
@@ -13,28 +14,81 @@ class ModelManagerMixin:
         return short if len(short) <= limit else short[:limit - 1] + "…"
 
     def _model_button_text(self) -> str:
-        return f"🧠 МОДЕЛЬ: {self._short_model_name(self._model_name, 24)}"
+        return f"🧠 {self._short_model_name(self._model_name, 24)}"
+
+    def _runtime_profile_key(
+        self,
+        server_name: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> str:
+        server = server_name or (self._server_var.get() if hasattr(self, "_server_var") else "")
+        model = model_name or getattr(self, "_model_name", "")
+        return f"{server}::{model}"
+
+    def _save_active_runtime_profile(self) -> None:
+        """Запомнить Context Length и параметры вывода для текущей модели."""
+        if not hasattr(self, "_runtime_profiles"):
+            return
+        try:
+            context_window = int(self._context_window_var.get())
+            max_tokens = int(self._max_tokens_var.get())
+            temperature = float(self._temperature_var.get())
+            think = bool(self._think_var.get())
+            auto_context = bool(self._auto_context_var.get()) if hasattr(self, "_auto_context_var") else True
+        except Exception:
+            return
+        self._runtime_profiles[self._runtime_profile_key()] = {
+            "context_window": context_window,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "think": think,
+            "auto_context": auto_context,
+        }
+
+    def _restore_runtime_profile(self, apply_recommended: bool = True) -> bool:
+        """Восстановить сохранённый профиль пары сервер+модель."""
+        profile = self._runtime_profiles.get(self._runtime_profile_key(), {})
+        if profile:
+            self._context_window_var.set(int(profile.get("context_window", DEFAULT_CONTEXT_WINDOW)))
+            self._max_tokens_var.set(int(profile.get("max_tokens", DEFAULT_MAX_TOKENS)))
+            self._temperature_var.set(float(profile.get("temperature", 0.3)))
+            self._think_var.set(bool(profile.get("think", False)))
+            if hasattr(self, "_auto_context_var"):
+                self._auto_context_var.set(bool(profile.get("auto_context", True)))
+            return True
+        if apply_recommended:
+            recommended = self._profile_for_model(self._model_name)
+            self._temperature_var.set(float(recommended["temperature"]))
+            self._max_tokens_var.set(int(recommended["max_tokens"]))
+            self._think_var.set(bool(recommended["think"]))
+        return False
 
     def _update_model_ui(self):
-        """Обновить кнопку, подписи слайдеров и заголовок окна."""
+        """Обновить модель, параметры и заголовок окна."""
         if hasattr(self, "_model_btn"):
             self._model_btn.config(text=self._model_button_text())
         if hasattr(self, "_temp_label"):
             self._temp_label.config(text=f"{self._temperature_var.get():.1f}")
         if hasattr(self, "_tok_label"):
             self._tok_label.config(text=str(int(self._max_tokens_var.get())))
+        if hasattr(self, "_status_model"):
+            self._status_model.config(text=self._short_model_name(self._model_name, 30))
+        if hasattr(self, "_update_limit_summary"):
+            self._update_limit_summary()
+        if hasattr(self, "_update_ctx_label"):
+            self._update_ctx_label()
         session = f"  [{self._session_name}]" if self._session_name else ""
         self.root.title(
-            f"🚀 LLM Assistant v1.01 — {self._short_model_name(self._model_name, 42)}{session}"
+            f"LLM Assistant v2.0.0 — {self._short_model_name(self._model_name, 42)}{session}"
         )
 
     def _profile_for_model(self, model_name: str) -> Dict[str, object]:
-        """Небольшие безопасные профили по семейству модели."""
+        """Безопасные профили вывода. Context Length задаётся пользователем."""
         name = model_name.lower()
         if model_name == DEFAULT_MODEL_NAME:
             return {"temperature": 0.3, "max_tokens": 8192, "think": False}
         if any(key in name for key in ("deepseek-r1", "qwq", "reasoning")):
-            return {"temperature": 0.6, "max_tokens": 32000, "think": True}
+            return {"temperature": 0.6, "max_tokens": 16000, "think": True}
         if "qwen3" in name:
             return {"temperature": 0.3, "max_tokens": 16000, "think": False}
         if any(key in name for key in ("coder", "codestral", "starcoder")):
@@ -47,17 +101,20 @@ class ModelManagerMixin:
         model_name = model_name.strip()
         if not model_name:
             return
+        self._save_active_runtime_profile()
         self._model_name = model_name
         server_name = self._server_var.get() if hasattr(self, "_server_var") else ""
         if server_name:
             self._server_model_selection[server_name] = model_name
-        if apply_profile:
-            profile = self._profile_for_model(model_name)
-            self._temperature_var.set(float(profile["temperature"]))
-            self._max_tokens_var.set(int(profile["max_tokens"]))
-            self._think_var.set(bool(profile["think"]))
+        restored = self._restore_runtime_profile(apply_recommended=apply_profile)
+        self._save_active_runtime_profile()
         self._update_model_ui()
-        self._status.config(text=f"🧠 Активная модель: {model_name}")
+        suffix = " · восстановлен профиль" if restored else ""
+        self._status.config(text=f"🧠 Активная модель: {model_name}{suffix}")
+        if hasattr(self, "_update_server_context_badge"):
+            self._update_server_context_badge(None, None, model_name)
+        if hasattr(self, "_sync_server_context_async"):
+            self.root.after(120, lambda: self._sync_server_context_async(announce=False))
 
     def _request_server_models(self) -> List[str]:
         """Получить модели выбранного сервера, включая Ollama /api/tags."""
@@ -224,6 +281,7 @@ class ModelManagerMixin:
         model_list.bind("<Double-Button-1>", lambda event: apply_selection())
         manual_entry.bind("<Return>", lambda event: apply_selection())
 
+        # Если список уже был получен при проверке соединения — показываем сразу.
         if self._available_models:
             fill_list(self._available_models)
         else:

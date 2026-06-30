@@ -1,11 +1,54 @@
 """Сохранение сессий и управление контекстом LLM Assistant."""
 
-from .common import *
+from .common import *  # noqa: F401,F403
+
 
 class SessionMixin:
-    def _session_path(self, name: str) -> Path:
-        safe = re.sub(r"[^\w\-]", "_", name.strip()) or DEFAULT_SESSION
-        return SESSION_DIR / f"{safe}.json"
+    def _session_safe_name(self, name: str) -> str:
+        return re.sub(r"[^\w\-]", "_", name.strip()) or DEFAULT_SESSION
+
+    def _session_path(self, name: str, for_write: bool = False) -> Path:
+        """Return the correct plaintext or encrypted path for a session."""
+        safe = self._session_safe_name(name)
+        encrypted = SESSION_DIR / f"{safe}.llms"
+        plaintext = SESSION_DIR / f"{safe}.json"
+        if for_write:
+            protected = bool(
+                hasattr(self, "_security_enabled")
+                and self._security_enabled()
+            )
+            return encrypted if protected else plaintext
+        if encrypted.exists():
+            return encrypted
+        if plaintext.exists():
+            return plaintext
+        protected = bool(
+            hasattr(self, "_security_enabled")
+            and self._security_enabled()
+        )
+        return encrypted if protected else plaintext
+
+    def _session_files(self) -> List[Path]:
+        """Return all session containers, deduplicated by session stem."""
+        by_stem: Dict[str, Path] = {}
+        # Prefer encrypted containers if both variants exist after an interrupted
+        # migration. The plaintext copy can then be cleaned up on the next save.
+        for path in SESSION_DIR.glob("*.json"):
+            by_stem[path.stem] = path
+        for path in SESSION_DIR.glob("*.llms"):
+            by_stem[path.stem] = path
+        return list(by_stem.values())
+
+    def _read_session_data(self, path: Path) -> Dict[str, object]:
+        payload = path.read_bytes()
+        if path.suffix.lower() == ".llms":
+            if not hasattr(self, "_security_decrypt_bytes"):
+                raise RuntimeError("Encrypted sessions are not supported")
+            payload = self._security_decrypt_bytes(payload, "session")
+        data = json.loads(payload.decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("Invalid session format")
+        return data
 
     def _update_session_ui(self):
         """Обновить подпись текущей сессии в интерфейсе."""
@@ -15,6 +58,10 @@ class SessionMixin:
             self._session_var.set(self._session_name)
         if hasattr(self, "_update_model_ui"):
             self._update_model_ui()
+        if hasattr(self, "_sync_control_deck"):
+            self._sync_control_deck()
+        if hasattr(self, "_set_control_deck_visible") and hasattr(self, "_control_deck_visible"):
+            self._set_control_deck_visible(bool(self._control_deck_visible.get()))
 
     def _save_current_session(self):
         self._save_session(self._session_name)
@@ -58,8 +105,11 @@ class SessionMixin:
         if hasattr(self, "_code_viewer"):
             code_viewer = self._code_viewer.get("1.0", "end-1c")
 
+        if hasattr(self, "_save_active_runtime_profile"):
+            self._save_active_runtime_profile()
+
         data = {
-            "version": "1.01",
+            "version": 16,
             "name": name,
             "saved_at": datetime.now().isoformat(),
             "estimated_tokens": tokens,
@@ -68,9 +118,17 @@ class SessionMixin:
             "server_url": self._server_url,
             "server_model_selection": self._server_model_selection,
             "llama_cpp_settings": self._llama_cpp_settings,
+            "context_window": int(
+                self._context_window_var.get()
+                if hasattr(self, "_context_window_var")
+                else DEFAULT_CONTEXT_WINDOW
+            ),
             "max_tokens": int(self._max_tokens_var.get()),
             "temperature": round(self._temperature_var.get(), 2),
+            "runtime_profiles": getattr(self, "_runtime_profiles", {}),
             "think": self._think_var.get(),
+            "auto_context": self._auto_context_var.get() if hasattr(self, "_auto_context_var") else True,
+            "control_deck_visible": self._control_deck_visible.get() if hasattr(self, "_control_deck_visible") else True,
             "language_mode": self._language_var.get(),
             "search_source": self._search_source_var.get(),
             "context_mode": self._context_mode_var.get(),
@@ -96,14 +154,22 @@ class SessionMixin:
         }
 
         try:
-            path = self._session_path(name)
+            path = self._session_path(name, for_write=True)
             path.parent.mkdir(parents=True, exist_ok=True)
-            temp_path = path.with_suffix(".json.tmp")
-            temp_path.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            serialized = json.dumps(
+                data, ensure_ascii=False, indent=2
+            ).encode("utf-8")
+            if path.suffix.lower() == ".llms":
+                serialized = self._security_encrypt_bytes(serialized, "session")
+            temp_path = path.with_suffix(path.suffix + ".tmp")
+            temp_path.write_bytes(serialized)
             temp_path.replace(path)
+            # Remove a stale alternate-format copy only after the new file has
+            # been committed successfully.
+            alternate = path.with_suffix(
+                ".json" if path.suffix.lower() == ".llms" else ".llms"
+            )
+            alternate.unlink(missing_ok=True)
             try:
                 os.chmod(path, 0o600)
             except OSError:
@@ -138,19 +204,10 @@ class SessionMixin:
             return False
 
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict) and "api_keys" in data:
-                data.pop("api_keys", None)
-                migration_tmp = path.with_suffix(".json.migrate")
-                migration_tmp.write_text(
-                    json.dumps(data, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                migration_tmp.replace(path)
-                try:
-                    os.chmod(path, 0o600)
-                except OSError:
-                    pass
+            data = self._read_session_data(path)
+            # Старые версии могли хранить API-ключи в сессии. Они удаляются
+            # только из памяти и никогда не возвращаются в новый файл.
+            data.pop("api_keys", None)
         except Exception as exc:
             if not silent:
                 messagebox.showerror(
@@ -160,9 +217,12 @@ class SessionMixin:
                 )
             return False
 
+        # Настройки модели и сервера.
         saved_server_name = data.get("server_name", "LM Studio")
         saved_server_url = data.get("server_url", SERVERS["LM Studio"])
         self._server_var.set(saved_server_name)
+        # Для известных серверов используем актуальный URL из конфигурации,
+        # чтобы старый адрес из сессии не ломал подключение.
         if saved_server_name in SERVERS:
             self._server_url = SERVERS[saved_server_name]
         else:
@@ -190,10 +250,31 @@ class SessionMixin:
             or data.get("model")
             or DEFAULT_MODEL_NAME
         )
+        saved_profiles = data.get("runtime_profiles", {})
+        if isinstance(saved_profiles, dict):
+            self._runtime_profiles = {
+                str(key): dict(value)
+                for key, value in saved_profiles.items()
+                if isinstance(value, dict)
+            }
+        try:
+            context_window = int(data.get("context_window", DEFAULT_CONTEXT_WINDOW))
+        except Exception:
+            context_window = DEFAULT_CONTEXT_WINDOW
+        if hasattr(self, "_context_window_var"):
+            self._context_window_var.set(context_window)
         self._max_tokens_var.set(data.get("max_tokens", DEFAULT_MAX_TOKENS))
         self._temperature_var.set(data.get("temperature", 0.3))
         self._think_var.set(data.get("think", False))
+        if hasattr(self, "_auto_context_var"):
+            self._auto_context_var.set(bool(data.get("auto_context", True)))
+        if hasattr(self, "_control_deck_visible"):
+            self._control_deck_visible.set(bool(data.get("control_deck_visible", True)))
+        if hasattr(self, "_restore_runtime_profile"):
+            self._restore_runtime_profile(apply_recommended=False)
 
+        # Секреты намеренно не загружаются из сессий. Старые v12-файлы могут
+        # содержать api_keys в открытом виде; приложение их игнорирует.
         self._language_var.set(
             data.get("language_mode", DEFAULT_LANGUAGE_MODE)
             if data.get("language_mode", DEFAULT_LANGUAGE_MODE) in LANGUAGE_PROFILES
@@ -207,6 +288,7 @@ class SessionMixin:
             saved_budget = 32768
         self._file_context_budget_var.set(saved_budget)
 
+        # Чат.
         self.chat_history.clear()
         self.chat_text.config(state=tk.NORMAL)
         self.chat_text.delete("1.0", tk.END)
@@ -225,6 +307,7 @@ class SessionMixin:
             self.chat_history.append(message)
             self._render_msg(message.role, message.content, message.timestamp)
 
+        # Файлы проекта.
         loaded_files = data.get("loaded_files", {})
         self.loaded_files = (
             {str(name): str(file_path) for name, file_path in loaded_files.items()}
@@ -240,6 +323,7 @@ class SessionMixin:
         self._refresh_files_list()
         self.current_project = data.get("current_project")
 
+        # Веб-контекст.
         self.web_results.clear()
         for item in data.get("web_results", []):
             try:
@@ -259,6 +343,7 @@ class SessionMixin:
             self._refresh_web_list()
         self._clear_web_preview()
 
+        # Незавершённый текст и Code Viewer.
         if hasattr(self, "input_text"):
             self.input_text.delete("1.0", tk.END)
             self.input_text.insert("1.0", data.get("draft_input", ""))
@@ -334,7 +419,7 @@ class SessionMixin:
     def _read_session_summary(self, path: Path) -> Dict[str, object]:
         """Безопасно прочитать краткие сведения о сохранённой сессии."""
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = self._read_session_data(path)
             tokens = data.get("estimated_tokens", {})
             if isinstance(tokens, dict):
                 token_total = int(tokens.get("total", 0))
@@ -364,7 +449,7 @@ class SessionMixin:
         summaries = [
             self._read_session_summary(path)
             for path in sorted(
-                SESSION_DIR.glob("*.json"),
+                self._session_files(),
                 key=lambda item: item.stat().st_mtime,
                 reverse=True,
             )
@@ -463,6 +548,7 @@ class SessionMixin:
             index = summaries.index(item)
             summaries.remove(item)
             tree.delete(str(index))
+            # Перестроить iid после удаления.
             for row in tree.get_children():
                 tree.delete(row)
             for idx, summary in enumerate(summaries):
@@ -577,6 +663,103 @@ class SessionMixin:
             self._web_lb.delete(0, tk.END)
         self._clear_web_preview()
 
+    def _clear_messages_and_searches(self):
+        """Удалить чат и все результаты веб-поиска из текущей сессии.
+
+        Файлы проекта, выбранный сервер, модель, язык интерфейса и параметры
+        генерации остаются без изменений. Очищенное состояние сразу
+        сохраняется, поэтому удалённые сообщения не восстановятся после
+        перезапуска приложения.
+        """
+        if self.is_loading:
+            code = self._ui_language_code() if hasattr(self, "_ui_language_code") else "ru"
+            titles = {
+                "ru": "Модель работает",
+                "en": "Model is running",
+                "bi": "Model / Модель работает",
+            }
+            messages = {
+                "ru": "Сначала дождитесь завершения текущего ответа.",
+                "en": "Wait for the current response to finish first.",
+                "bi": "Wait for the response / Дождитесь завершения ответа.",
+            }
+            messagebox.showwarning(
+                titles.get(code, titles["ru"]),
+                messages.get(code, messages["ru"]),
+                parent=self.root,
+            )
+            return
+
+        code = self._ui_language_code() if hasattr(self, "_ui_language_code") else "ru"
+        titles = {
+            "ru": "Очистить сообщения и поиск",
+            "en": "Clear messages and searches",
+            "bi": "Clear / Очистить сообщения и поиск",
+        }
+        questions = {
+            "ru": (
+                "Удалить все сообщения чата и все результаты веб-поиска?\n\n"
+                "Также будут очищены загруженные тексты веб-страниц и поля поиска.\n"
+                "Файлы проекта, модель, сервер и настройки останутся.\n\n"
+                "Отменить это действие после сохранения будет нельзя."
+            ),
+            "en": (
+                "Delete all chat messages and all web-search results?\n\n"
+                "Loaded page text and search fields will also be cleared.\n"
+                "Project files, model, server and settings will remain.\n\n"
+                "This cannot be undone after the session is saved."
+            ),
+            "bi": (
+                "Delete all messages and searches / Удалить все сообщения и поиск?\n\n"
+                "Web results and page text / Результаты и тексты страниц будут очищены.\n"
+                "Project files and settings / Файлы и настройки останутся."
+            ),
+        }
+        if not messagebox.askyesno(
+            titles.get(code, titles["ru"]),
+            questions.get(code, questions["ru"]),
+            parent=self.root,
+        ):
+            return
+
+        self._clear_chat_context()
+        self._clear_web_context()
+
+        # Очистить введённые поисковые адреса и запросы, но не черновик чата.
+        if hasattr(self, "_search_entry"):
+            self._search_entry.delete(0, tk.END)
+        if hasattr(self, "_url_entry"):
+            self._url_entry.delete(0, tk.END)
+            placeholder = (
+                self._tr("url_placeholder")
+                if hasattr(self, "_tr")
+                else "https://  (вставь URL → Enter для загрузки страницы)"
+            )
+            self._url_entry.insert(0, placeholder)
+        if hasattr(self, "_src_status"):
+            self._src_status.config(text="")
+
+        # Сбросить остатки незавершённого потокового форматирования.
+        self._stream_buffer = ""
+        self._in_code_block = False
+        self._current_code_tag = None
+        self._context_warning_shown = False
+
+        if hasattr(self, "_update_ctx_label"):
+            self._update_ctx_label()
+
+        saved = self._save_session(self._session_name, silent=True)
+        if hasattr(self, "_status"):
+            status_messages = {
+                "ru": "🧹 Все сообщения и результаты поиска удалены",
+                "en": "🧹 All messages and search results were cleared",
+                "bi": "🧹 Cleared / Сообщения и поиск удалены",
+            }
+            suffix = "" if saved else " ⚠️"
+            self._status.config(
+                text=status_messages.get(code, status_messages["ru"]) + suffix
+            )
+
     def _reset_context(self, mode: str):
         """Очистить историю, не уничтожая сохранённую старую сессию."""
         if self.is_loading:
@@ -613,6 +796,7 @@ class SessionMixin:
         if mode == "keep_files":
             self._clear_web_context()
 
+        # Старая сессия остаётся нетронутой. Продолжение получает новое имя.
         self._session_name = self._continuation_name(old_name)
         self._update_session_ui()
         self._context_warning_shown = False
@@ -659,10 +843,12 @@ class SessionMixin:
         if not name or not name.strip():
             return
 
+        # Сначала надёжно сохранить предыдущую работу.
         old_name = self._session_name
         if not self._save_session(old_name, silent=True):
             return
 
+        # Полностью очистить рабочий контекст.
         self._clear_chat_context()
         self.loaded_files.clear()
         self._file_context_selected.clear()
@@ -685,6 +871,8 @@ class SessionMixin:
                 "https://  (вставь URL → Enter для загрузки страницы)",
             )
 
+        # Новая сессия получает чистые настройки контекста, но сервер,
+        # модель и параметры генерации намеренно сохраняются.
         self._session_name = name.strip()
         self._context_mode_var.set("auto")
         self._file_context_budget_var.set(32768)
@@ -714,7 +902,7 @@ class SessionMixin:
 
     def _list_sessions(self):
         paths = sorted(
-            SESSION_DIR.glob("*.json"),
+            self._session_files(),
             key=lambda item: item.stat().st_mtime,
             reverse=True,
         )
@@ -725,7 +913,7 @@ class SessionMixin:
 
     def _list_session_names(self) -> List[str]:
         names = []
-        for path in SESSION_DIR.glob("*.json"):
+        for path in self._session_files():
             summary = self._read_session_summary(path)
             names.append(str(summary["name"]))
         return sorted(set(names))
@@ -737,9 +925,14 @@ class SessionMixin:
             parent=self.root,
         ):
             return
-        path = self._session_path(self._session_name)
+        safe = self._session_safe_name(self._session_name)
+        paths = [
+            SESSION_DIR / f"{safe}.json",
+            SESSION_DIR / f"{safe}.llms",
+        ]
         try:
-            path.unlink(missing_ok=True)
+            for path in paths:
+                path.unlink(missing_ok=True)
         except Exception as exc:
             messagebox.showerror("Ошибка", str(exc), parent=self.root)
             return
@@ -754,4 +947,6 @@ class SessionMixin:
             self._cancel_connection_retry()
             self._save_session(self._session_name, silent=True)
         finally:
+            if hasattr(self, "_security_forget_key"):
+                self._security_forget_key()
             self.root.destroy()

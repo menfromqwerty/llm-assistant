@@ -1,72 +1,37 @@
-name: Bug Report
-description: Something is not working correctly
-labels: [bug]
+name: Bug report
+description: Сообщить о воспроизводимой ошибке
+title: "[Bug]: "
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
-      value: |
-        Thanks for taking the time to report a bug.
-        Please fill in as much detail as possible.
-
+      value: "Не прикладывайте API-ключи, .env и приватные сессии."
   - type: input
     id: version
     attributes:
-      label: LLM Assistant version
-      placeholder: "v1.01"
+      label: Версия
+      placeholder: v17.0.0
     validations:
       required: true
-
-  - type: input
-    id: server
-    attributes:
-      label: LLM server
-      placeholder: "LM Studio / Ollama / llama.cpp / Jan"
-    validations:
-      required: true
-
-  - type: input
-    id: model
-    attributes:
-      label: Model name
-      placeholder: "qwen/qwen3-coder-30b"
-
   - type: input
     id: os
     attributes:
-      label: Operating system
-      placeholder: "Windows 11 / Ubuntu 24.04 / macOS 15"
+      label: ОС и версия Python
+      placeholder: Windows 11, Python 3.11.9
     validations:
       required: true
-
-  - type: input
-    id: python
-    attributes:
-      label: Python version
-      placeholder: "3.11"
-    validations:
-      required: true
-
-  - type: textarea
-    id: description
-    attributes:
-      label: What happened?
-      description: Describe the bug clearly.
-    validations:
-      required: true
-
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
-      placeholder: |
-        1. Open the app
-        2. Load a file
-        3. ...
+      label: Шаги воспроизведения
     validations:
       required: true
-
   - type: textarea
-    id: traceback
+    id: expected
     attributes:
-      label: Error message or traceback
+      label: Ожидаемое поведение
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи без секретов
       render: shell

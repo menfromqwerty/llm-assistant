@@ -39,6 +39,8 @@ Thumbs.db
 sessions/
 backups/
 *.session.json
+*.llms
+security.json
 
 # Models and large files
 *.gguf

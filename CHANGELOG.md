@@ -1,42 +1,34 @@
 # Changelog
 
-## v1.01 — 2026-06-15
+## 2.0.0 — 2026-06-30
 
-### Added
-- Live UI localization: English, Russian, bilingual and Windows-auto modes
-- Language switching without restart via 🌐 LANGUAGE button
-- Session persistence for interface language
-- GitHub community files: CI, Dependabot, Issue templates
+Публичная GitHub-версия после `1.01`.
 
-### Security
-- Safe ZIP extraction without `extractall` — path traversal and ZIP bomb protection
-- API keys excluded from session files
-- Migration of old sessions removes stored `api_keys`
-- SSRF protection in web page loader
-- Custom LLM server URL validated before use
-- Removed `shell=True` from all subprocess calls
-- Prompt injection protection in system prompt
+### Добавлено
 
-### Fixed
-- API source test no longer reads destroyed Tkinter widgets
-- Correct environment variable names for API keys
+- Минималистичный однооконный интерфейс.
+- Панель **Control Deck** на главном экране.
+- Ползунки `Context Length`, `Max Output`, `Temperature`, `File Budget`.
+- Сегментированная полоса использования контекста `CHAT / FILES / WEB / OUT / FREE`.
+- AUTO FIT для подбора минимального подходящего контекстного окна.
+- AUTO CTX для синхронизации контекста с LM Studio и Ollama.
+- Единая кнопка `Отправить ↔ Остановить`.
+- Остановка генерации через повторное нажатие, Enter или Esc.
+- Копирование любого текста и кода из чата мышью.
+- Яркое выделение выбранного текста.
+- Поддержка зашифрованных сессий `.llms` с паролем.
+- Поддержка LM Studio, Ollama, llama.cpp, Jan и OpenAI-совместимых серверов.
 
----
+### Изменено
 
-## v1.00 — 2026-06-14
+- Версия проекта обновлена до `2.0.0`.
+- Убраны локальные пути из документации.
+- README подготовлен для чистой публикации.
+- `.gitignore` дополнен правилами для сессий, ключей, моделей и локальных данных.
 
-### Core features
-- Local AI assistant for embedded development (STM32, ESP32, AVR, Atmel)
-- Streaming responses from LM Studio, Ollama, llama.cpp, Jan
-- Default model: `qwen/qwen3-coder-30b` (262K context window)
-- Smart file context: loads project files with token budget management
-- 4-source web search: GitHub, Stack Overflow, Tavily, DuckDuckGo
-- Auto-routing and auto-fallback between search sources
-- Code Viewer with click-to-extract from chat
-- Drag-and-drop files and ZIP into input field
-- Session save/restore with chat history and project files
-- Model switcher with profiles (temperature, max_tokens, /think)
-- Modular architecture: 12 independent mixins + common constants
-- Input normalization: tabs to spaces, trailing whitespace cleanup
-- Token counter across chat, files and web pages
-- Smart layout presets: Code / Read / Standard
+### Безопасность
+
+- Проверено отсутствие встроенных токенов, API-ключей, паролей и приватных ключей.
+- `.env` исключён из Git, оставлен только безопасный `.env.example` с пустыми значениями.
+- Сессии, локальный `security.json`, резервные копии и файлы `.llms` исключены из репозитория.
+- Добавлена инструкция `docs/GITHUB_RELEASE_V2.md` для финальной проверки перед публикацией.

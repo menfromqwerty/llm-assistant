@@ -1,7 +1,8 @@
-"""Точка запуска LLM Assistant v1.01."""
+"""Точка запуска LLM Assistant v2.0.0."""
 
 from llm_assistant.app import LLMAssistant
 from llm_assistant.common import HAS_DND, TkinterDnD, tk
+
 
 def main() -> None:
     if HAS_DND:
@@ -14,6 +15,7 @@ def main() -> None:
 
     LLMAssistant(root)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()

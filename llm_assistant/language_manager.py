@@ -9,9 +9,14 @@ from __future__ import annotations
 import locale
 from typing import Dict
 
-from .common import *
+from .common import *  # noqa: F401,F403
 
+
+# В режиме EN + RU сохраняем компактный смешанный интерфейс, чтобы верхняя
+# панель не становилась слишком широкой. Русский и English переводят весь
+# основной интерфейс немедленно, без перезапуска приложения.
 UI_TEXTS: Dict[str, Dict[str, str]] = {
+    # Главное меню
     "menu_file": {"ru": "📁 Файл", "en": "📁 File", "bi": "📁 File / Файл"},
     "open_file": {"ru": "📄 Открыть файл", "en": "📄 Open file", "bi": "📄 Open / Открыть файл"},
     "open_zip": {"ru": "📦 Открыть ZIP", "en": "📦 Open ZIP", "bi": "📦 Open ZIP"},
@@ -40,7 +45,11 @@ UI_TEXTS: Dict[str, Dict[str, str]] = {
     "delete_current": {"ru": "🗑️ Удалить текущую", "en": "🗑️ Delete current", "bi": "🗑️ Delete / Удалить текущую"},
     "templates": {"ru": "📋 Шаблоны", "en": "📋 Templates", "bi": "📋 Templates / Шаблоны"},
     "language_menu": {"ru": "🌐 Язык", "en": "🌐 Language", "bi": "🌐 Language / Язык"},
+    "menu_security": {"ru": "🔐 Защита", "en": "🔐 Security", "bi": "🔐 Security / Защита"},
+    "security_settings": {"ru": "⚙ Настройки защиты...", "en": "⚙ Security settings...", "bi": "⚙ Security / Настройки защиты..."},
+    "lock_now": {"ru": "🔒 Заблокировать сейчас", "en": "🔒 Lock now", "bi": "🔒 Lock / Заблокировать сейчас"},
 
+    # Пункты выбора языка и шаблонов
     "lang_bilingual": {"ru": "English + Русский", "en": "English + Russian", "bi": "English + Русский"},
     "lang_russian": {"ru": "Русский", "en": "Russian", "bi": "Русский / Russian"},
     "lang_english": {"ru": "Английский", "en": "English", "bi": "English / Английский"},
@@ -54,6 +63,23 @@ UI_TEXTS: Dict[str, Dict[str, str]] = {
     "tpl_web": {"ru": "🌐 Веб-анализ", "en": "🌐 Web analysis", "bi": "🌐 Web analysis / Веб-анализ"},
     "tpl_search": {"ru": "🔍 Поиск-анализ", "en": "🔍 Search analysis", "bi": "🔍 Search analysis / Поиск-анализ"},
 
+    # Минималистичная навигация v18
+    "new_chat": {"ru": "＋ Новый чат", "en": "＋ New chat", "bi": "＋ New / Новый чат"},
+    "collapse": {"ru": "◀  Свернуть", "en": "◀  Collapse", "bi": "◀  Collapse / Свернуть"},
+    "sessions_nav": {"ru": "💬  Сессии", "en": "💬  Sessions", "bi": "💬  Sessions / Сессии"},
+    "files_nav": {"ru": "📁  Файлы", "en": "📁  Files", "bi": "📁  Files / Файлы"},
+    "web_nav": {"ru": "🌐  Поиск", "en": "🌐  Search", "bi": "🌐  Search / Поиск"},
+    "code_nav": {"ru": "⚡  Код", "en": "⚡  Code", "bi": "⚡  Code / Код"},
+    "context_nav": {"ru": "♻  Контекст", "en": "♻  Context", "bi": "♻  Context / Контекст"},
+    "clear_nav": {"ru": "🧹  Очистить", "en": "🧹  Clear", "bi": "🧹  Clear / Очистить"},
+    "settings_nav": {"ru": "⚙  Настройки", "en": "⚙  Settings", "bi": "⚙  Settings / Настройки"},
+    "panel": {"ru": "Панель", "en": "Panel", "bi": "Panel / Панель"},
+    "conversation_plain": {"ru": "Диалог", "en": "Conversation", "bi": "Conversation / Диалог"},
+    "send_compact": {"ru": "➤ Отправить", "en": "➤ Send", "bi": "➤ Send / Отправить"},
+    "stop_compact": {"ru": "■ Остановить", "en": "■ Stop", "bi": "■ Stop / Остановить"},
+    "settings_tab": {"ru": "⚙ Настройки", "en": "⚙ Settings", "bi": "⚙ Settings / Настройки"},
+
+    # Верхняя панель
     "file_short": {"ru": "📄 Файл", "en": "📄 File", "bi": "📄 File / Файл"},
     "folder_short": {"ru": "📂 Папка", "en": "📂 Folder", "bi": "📂 Folder / Папка"},
     "search": {"ru": "🔍 Поиск", "en": "🔍 Search", "bi": "🔍 Search / Поиск"},
@@ -64,13 +90,16 @@ UI_TEXTS: Dict[str, Dict[str, str]] = {
     "temperature": {"ru": "Темп.:", "en": "Temp:", "bi": "Temp:"},
     "max_tokens": {"ru": "Макс. токенов:", "en": "Max tokens:", "bi": "Max tokens:"},
 
+    # Панель сессии
     "work": {"ru": "РАБОТА:", "en": "WORK:", "bi": "WORK / РАБОТА:"},
     "save_upper": {"ru": "💾 СОХРАНИТЬ", "en": "💾 SAVE", "bi": "💾 SAVE / СОХРАНИТЬ"},
     "save_as_upper": {"ru": "💾 СОХРАНИТЬ КАК...", "en": "💾 SAVE AS...", "bi": "💾 SAVE AS / СОХРАНИТЬ КАК..."},
     "open_session_upper": {"ru": "📂 ОТКРЫТЬ СЕССИЮ", "en": "📂 OPEN SESSION", "bi": "📂 OPEN / ОТКРЫТЬ СЕССИЮ"},
     "new_context_upper": {"ru": "♻ НОВЫЙ КОНТЕКСТ", "en": "♻ NEW CONTEXT", "bi": "♻ NEW / НОВЫЙ КОНТЕКСТ"},
     "clean_session_upper": {"ru": "🆕 ЧИСТАЯ СЕССИЯ", "en": "🆕 CLEAN SESSION", "bi": "🆕 CLEAN / ЧИСТАЯ СЕССИЯ"},
+    "clear_all_upper": {"ru": "🧹 ОЧИСТИТЬ", "en": "🧹 CLEAR", "bi": "🧹 CLEAR / ОЧИСТИТЬ"},
 
+    # Чат и ввод
     "dialog": {"ru": "💬 Диалог", "en": "💬 Conversation", "bi": "💬 Conversation / Диалог"},
     "copy": {"ru": "📋 Копировать", "en": "📋 Copy", "bi": "📋 Copy / Копировать"},
     "copy_all": {"ru": "📝 Копировать всё", "en": "📝 Copy all", "bi": "📝 Copy all / Копировать всё"},
@@ -81,6 +110,7 @@ UI_TEXTS: Dict[str, Dict[str, str]] = {
     "dnd_hint": {"ru": "🖱️ Перетащи файл сюда  •  ", "en": "🖱️ Drop a file here  •  ", "bi": "🖱️ Drop / Перетащи файл  •  "},
     "enter_hint": {"ru": "Enter=отправить  Shift+Enter=новая строка", "en": "Enter=send  Shift+Enter=new line", "bi": "Enter=send/отправить  Shift+Enter=new line"},
     "send": {"ru": "📤 Отправить", "en": "📤 Send", "bi": "📤 Send / Отправить"},
+    "stop": {"ru": "⛔ Остановить", "en": "⛔ Stop", "bi": "⛔ Stop / Остановить"},
     "file_to_input": {"ru": "📎 Файл→ввод", "en": "📎 File→input", "bi": "📎 File / Файл→input"},
     "normalize": {"ru": "🔧 Нормализовать", "en": "🔧 Normalize", "bi": "🔧 Normalize / Нормализовать"},
     "clear": {"ru": "🗑️ Очистить", "en": "🗑️ Clear", "bi": "🗑️ Clear / Очистить"},
@@ -91,6 +121,7 @@ UI_TEXTS: Dict[str, Dict[str, str]] = {
     "trim_tokens": {"ru": "✂️ Обрезать до N токенов", "en": "✂️ Trim to N tokens", "bi": "✂️ Trim / Обрезать до N токенов"},
     "paste": {"ru": "📋 Вставить (Ctrl+V)", "en": "📋 Paste (Ctrl+V)", "bi": "📋 Paste / Вставить (Ctrl+V)"},
 
+    # Вкладки и файлы
     "tab_files": {"ru": "📁 Файлы", "en": "📁 Files", "bi": "📁 Files / Файлы"},
     "tab_web": {"ru": "🌐 Веб", "en": "🌐 Web", "bi": "🌐 Web / Веб"},
     "tab_code": {"ru": "⚡ Код", "en": "⚡ Code", "bi": "⚡ Code / Код"},
@@ -107,6 +138,7 @@ UI_TEXTS: Dict[str, Dict[str, str]] = {
     "invert": {"ru": "↕ Инвертировать", "en": "↕ Invert", "bi": "↕ Invert / Инвертировать"},
     "save": {"ru": "💾 Сохранить", "en": "💾 Save", "bi": "💾 Save / Сохранить"},
 
+    # Веб и просмотр кода
     "source_auto": {"ru": "🔀 Авто", "en": "🔀 Auto", "bi": "🔀 Auto / Авто"},
     "url_placeholder": {"ru": "https://  (вставь URL → Enter для загрузки страницы)", "en": "https://  (paste URL → Enter to load page)", "bi": "https://  (paste URL / вставьте URL → Enter)"},
     "load": {"ru": "⬇️ Загрузить", "en": "⬇️ Load", "bi": "⬇️ Load / Загрузить"},
@@ -119,6 +151,7 @@ UI_TEXTS: Dict[str, Dict[str, str]] = {
     "save_py": {"ru": "💾 Сохранить .py", "en": "💾 Save .py", "bi": "💾 Save / Сохранить .py"},
     "to_input_field": {"ru": "✏️ В поле ввода", "en": "✏️ To input field", "bi": "✏️ To input / В поле ввода"},
 
+    # Служебные подписи
     "server": {"ru": "сервер", "en": "server", "bi": "server / сервер"},
     "ready": {"ru": "✅ Готов", "en": "✅ Ready", "bi": "✅ Ready / Готов"},
     "done": {"ru": "✅ Готово", "en": "✅ Done", "bi": "✅ Done / Готово"},
@@ -127,6 +160,7 @@ UI_TEXTS: Dict[str, Dict[str, str]] = {
     "selected_prefix": {"ru": "Отмечено: ", "en": "Selected: ", "bi": "Selected / Отмечено: "},
     "files_prefix": {"ru": "Файлы: ", "en": "Files: ", "bi": "Files / Файлы: "},
 }
+
 
 class LanguageManagerMixin:
     """Управляет языком интерфейса без влияния на язык ответа модели."""
@@ -189,6 +223,7 @@ class LanguageManagerMixin:
         if key:
             return prefix + self._tr(key, core)
 
+        # Динамические подписи: сохраняем значение после переведённого префикса.
         for prefix_key in self._PREFIX_KEYS:
             variants = UI_TEXTS[prefix_key]
             for old_prefix in variants.values():
@@ -262,6 +297,7 @@ class LanguageManagerMixin:
         if isinstance(menu, tk.Menu):
             self._translate_menu(menu, set())
 
+        # Entry не имеет свойства text, поэтому placeholder обновляется отдельно.
         url_entry = getattr(self, "_url_entry", None)
         if url_entry is not None:
             current = url_entry.get()
@@ -296,6 +332,8 @@ class LanguageManagerMixin:
             self._update_session_ui()
         if hasattr(self, "_update_file_tokens"):
             self._update_file_tokens()
+        if hasattr(self, "_update_security_ui"):
+            self._update_security_ui()
         if hasattr(self, "_status"):
             code = self._ui_language_code()
             status = {
@@ -356,10 +394,11 @@ class LanguageManagerMixin:
             "bi": "ℹ️ UI / Интерфейс only; model answers follow the prompt language",
         }[code]
         menu.add_command(label=info, state=tk.DISABLED)
-        x = self._language_btn.winfo_rootx() if hasattr(self, "_language_btn") else 0
-        y = (
-            self._language_btn.winfo_rooty() + self._language_btn.winfo_height()
-            if hasattr(self, "_language_btn")
-            else 0
-        )
+        button = getattr(self, "_language_btn", None)
+        if button is not None and button.winfo_ismapped():
+            x = button.winfo_rootx()
+            y = button.winfo_rooty() + button.winfo_height()
+        else:
+            x = self.root.winfo_pointerx()
+            y = self.root.winfo_pointery()
         menu.tk_popup(x, y)

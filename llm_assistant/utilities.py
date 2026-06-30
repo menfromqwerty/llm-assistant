@@ -3,7 +3,8 @@
 Модуль выделен из монолитного файла v9 для удобства сопровождения.
 """
 
-from .common import *
+from .common import *  # noqa: F401,F403
+
 
 class UtilitiesMixin:
     def _template_menu(self):
@@ -22,21 +23,23 @@ class UtilitiesMixin:
 
     def _layout_preset(self, mode: str):
         if mode == "code":
+            # Большое поле ввода + Code Viewer справа
             self.left_pw.sashpos(0, int(self.root.winfo_height() * 0.35))
-            self.nb.select(self.tab_code)
+            self._show_right_tab("code")
         elif mode == "read":
+            # Чат во весь экран
             self.left_pw.sashpos(0, int(self.root.winfo_height() * 0.85))
-            self.nb.select(self.tab_files)
-        else:
+            self._show_right_tab("files")
+        else:  # std
             self.left_pw.sashpos(0, int(self.root.winfo_height() * 0.62))
-            self.nb.select(self.tab_files)
+            self._show_right_tab("files")
         self._status.config(text=f"📐 Режим: {mode}")
 
     def _toggle_right_panel(self):
         if self._show_right.get():
-            self.main_pw.add(self.right_frame, weight=2)
+            self._show_right_tab("files")
         else:
-            self.main_pw.forget(self.right_frame)
+            self._hide_right_panel()
 
     def _popup(self, menu: tk.Menu, event):
         try:
@@ -45,18 +48,13 @@ class UtilitiesMixin:
             menu.grab_release()
 
     def _copy_selected(self):
-        try:
-            sel = self.chat_text.get(tk.SEL_FIRST, tk.SEL_LAST)
-            self.root.clipboard_clear()
-            self.root.clipboard_append(sel)
-            self._status.config(text="📋 Скопировано")
-        except Exception:
-            pass
+        # Единая функция сохраняет яркую подсветку и показывает окно
+        # подтверждения копирования.
+        return self._copy_widget_selection(self.chat_text)
 
     def _copy_all(self):
-        self.root.clipboard_clear()
-        self.root.clipboard_append(self.chat_text.get("1.0", tk.END))
-        self._status.config(text="📋 Весь чат скопирован")
+        self._select_all_widget_text(self.chat_text)
+        return self._copy_widget_selection(self.chat_text)
 
     def _save_selected(self):
         try:
@@ -111,7 +109,7 @@ class UtilitiesMixin:
         )
         if path:
             with open(path, "w", encoding="utf-8") as f:
-                f.write(f"# LLM Assistant v9\n\nМодель: {self._model_name}\n\n---\n\n")
+                f.write(f"# LLM Assistant v2.0.0\n\nМодель: {self._model_name}\n\n---\n\n")
                 for msg in self.chat_history:
                     f.write(f"## {msg.role.upper()} [{msg.timestamp}]\n\n{msg.content}\n\n---\n\n")
             self._status.config(text=f"💾 {Path(path).name}")
@@ -126,6 +124,18 @@ class UtilitiesMixin:
     def _show_stats(self):
         tokens = self._context_token_breakdown()
         total = tokens["total"]
+        window = self._effective_context_window()
+        output = int(self._max_tokens_var.get())
+        safety = max(512, int(window * 0.03))
+        projected = total + output + safety
+        last = getattr(self, "_last_generation_stats", {})
+        last_text = ""
+        if last:
+            last_text = (
+                f"\n  Последний запрос: вход {last.get('prompt_tokens', 0):,}, "
+                f"выход {last.get('completion_tokens', 0):,}, "
+                f"причина {last.get('finish_reason', 'unknown')}"
+            )
         self._add_msg(
             "system",
             f"📊 Активный контекст модели:\n"
@@ -134,33 +144,27 @@ class UtilitiesMixin:
             f"  Веб:                 ~{tokens['web']:,}  "
             f"({sum(1 for result in self.web_results if result.fetched)} страниц)\n"
             f"  ─────────────────────────\n"
-            f"  Итого: ~{total:,} / {CONTEXT_BUDGET:,} "
-            f"({total / CONTEXT_BUDGET * 100:.0f}%)\n"
-            f"  Полная история сессии: {len(self.chat_history)} сообщений\n"
-            f"  Окно модели: {MAX_CONTEXT_TOKENS:,} токенов\n"
-            f"  max_tokens ответа: {int(self._max_tokens_var.get())}\n"
-            f"  Температура: {self._temperature_var.get():.1f}\n"
-            f"  Сервер: {self._server_var.get()} ({self._server_url})\n"
-            f"  Модель: {self._model_name}\n"
-            f"  Сессия: {self._session_name}"
+            f"  Текущий вход:        ~{total:,}\n"
+            f"  Резерв ответа:       {output:,}\n"
+            f"  Технический запас:   ~{safety:,}\n"
+            f"  Окно сервера:        {window:,}\n"
+            f"  Прогноз заполнения:  {projected / window * 100:.0f}%\n"
+            f"  Полная история:      {len(self.chat_history)} сообщений\n"
+            f"  Температура:         {self._temperature_var.get():.1f}\n"
+            f"  Сервер:              {self._server_var.get()} ({self._server_url})\n"
+            f"  Модель:              {self._model_name}\n"
+            f"  Сессия:              {self._session_name}"
+            f"{last_text}"
         )
 
     def _welcome(self):
-        self._add_msg("system",
-            "🚀 LLM Assistant v9 — Qwen3-Coder-30B\n\n"
-            "🔍 Умный поиск (вкладка 🌐 Веб):\n"
-            "  🐙 GitHub — реальный код из репозиториев (бесплатно)\n"
-            "  🟠 Stack Overflow — решения ошибок (бесплатно)\n"
-            "  🔷 Tavily — AI-ready контент (1000 req/month бесплатно)\n"
-            "  🦆 DuckDuckGo — fallback без ключа\n"
-            "  🔀 Авто — выбирает источник по ключевым словам запроса\n"
-            "  🔑 Настройка ключей — кнопка в тулбаре или в поиске\n\n"
-            "⚡ При затыке:\n"
-            "  Авто-переключение: GitHub → SO → Tavily → DuckDuckGo\n"
-            "  Статус источника виден в строке под поиском\n\n"
-            "📐 Раскладки: [Код] [Чтение] [Стандарт]\n"
-            "💾 Сессия сохраняется автоматически при закрытии\n"
-            f"  Ключи сохраняются в сессии: {SESSION_DIR}\n\n"
-            f"🔢 Контекст: {CONTEXT_BUDGET:,} токенов  •  max_tokens: до 32 000\n"
-            "  Слайдеры в тулбаре сверху"
+        self._add_msg(
+            "system",
+            "LLM Assistant v2.0.0 готов к работе.\n\n"
+            "• Чат занимает основную часть окна.\n"
+            "• Файлы, веб, код и настройки открываются справа.\n"
+            "• Обычное выделение мышью и Ctrl+C работают для текста и кода.\n"
+            "• Ctrl+клик по блоку кода открывает его в Code Viewer.\n"
+            "• Во время генерации кнопка Отправить заменяется кнопкой Остановить.\n"
+            "• Context Length и Max Output настраиваются отдельно и сохраняются в сессии."
         )

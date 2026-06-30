@@ -1,5 +1,5 @@
 """
-LLM Assistant v1.01 — Live UI Localization
+LLM Assistant v2.0.0 — GitHub Clean Release
 ════════════════════════════════════════════════════════
 Новое в v6:
   • Умный поиск — 4 источника с авто-переключением при затыке:
@@ -64,6 +64,7 @@ except ImportError:
     TavilyClient = None
     HAS_TAVILY = False
 
+# Drag-and-drop: пробуем tkinterdnd2, иначе — встроенный механизм через XDG/Win
 try:
     from tkinterdnd2 import TkinterDnD, DND_FILES
     HAS_DND = True
@@ -74,8 +75,13 @@ except ImportError:
 
 load_dotenv()
 
+# ─────────────────────────────────────────────────────
+# КОНСТАНТЫ
+# ─────────────────────────────────────────────────────
+
 DEFAULT_MODEL_NAME = "qwen/qwen3-coder-30b"
 
+# Язык интерфейса. Язык ответа модели определяется языком запроса пользователя.
 DEFAULT_LANGUAGE_MODE = "English + Русский"
 LANGUAGE_PROFILES = {
     "English + Русский": {
@@ -100,6 +106,8 @@ LANGUAGE_PROFILES = {
     },
 }
 
+# Единая конфигурация локальных OpenAI-совместимых серверов.
+# start_mode определяет поведение цветной кнопки запуска.
 SERVER_CONFIGS = {
     "LM Studio": {
         "url": "http://localhost:1234/v1",
@@ -132,13 +140,16 @@ SERVERS = {
     for name, config in SERVER_CONFIGS.items()
 }
 MAX_CONTEXT_TOKENS = 262144
-CONTEXT_BUDGET     = 131072
+CONTEXT_BUDGET     = 131072  # legacy upper bound for older sessions
+DEFAULT_CONTEXT_WINDOW = 32768
 DEFAULT_MAX_TOKENS = 8192
 
+# Директория сессий
 SESSION_DIR  = Path.home() / ".llm_assistant" / "sessions"
 SESSION_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_SESSION = "default"
 
+# Расширения → язык для блоков кода
 EXT_LANG = {
     ".py": "python", ".js": "javascript", ".ts": "typescript",
     ".go": "go", ".rs": "rust", ".cpp": "cpp", ".c": "c",
@@ -149,6 +160,7 @@ EXT_LANG = {
     ".txt": "text", ".cfg": "ini", ".ini": "ini",
 }
 
+# Промпт-шаблоны
 TEMPLATES = {
     "💬 Объясни код":    "Объясни этот код подробно, шаг за шагом:\n\n",
     "🔧 Рефакторинг":   "Сделай рефакторинг кода: улучши читаемость, производительность, следуй PEP8:\n\n",
@@ -160,6 +172,7 @@ TEMPLATES = {
     "🔍 Поиск-анализ":   "На основе результатов поиска дай развёрнутый ответ с примерами кода:\n\n",
 }
 
+# ── Источники поиска ──────────────────────────────────
 SEARCH_SOURCES = {
     "github":        {"name": "GitHub",         "icon": "🐙", "color": "#238636", "needs_key": False},
     "stackoverflow": {"name": "Stack Overflow",  "icon": "🟠", "color": "#f48024", "needs_key": False},
@@ -167,6 +180,7 @@ SEARCH_SOURCES = {
     "duckduckgo":    {"name": "DuckDuckGo",      "icon": "🦆", "color": "#de5833", "needs_key": False},
 }
 
+# Ключевые слова → приоритетный источник
 SOURCE_ROUTING = {
     "github":        ["github", "репозиторий", "repo", "library", "библиотека",
                       "пример кода", "example", "implementation", "open source"],
@@ -176,11 +190,13 @@ SOURCE_ROUTING = {
                       "установить", "install", "настройка", "configure"],
 }
 
+
 @dataclass
 class Message:
     role: str
     content: str
     timestamp: datetime
+
 
 @dataclass
 class WebResult:
@@ -189,5 +205,9 @@ class WebResult:
     snippet:   str
     full_text: str    = ""
     fetched:   bool   = False
-    source:    str    = "duckduckgo"
+    source:    str    = "duckduckgo"   # какой источник вернул результат
 
+
+# ─────────────────────────────────────────────────────
+# ОБЩИЕ НАСТРОЙКИ И МОДЕЛИ ДАННЫХ
+# ─────────────────────────────────────────────────────

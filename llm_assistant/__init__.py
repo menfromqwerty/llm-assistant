@@ -1,4 +1,4 @@
-"""LLM Assistant v1.01 — модульная версия."""
+"""LLM Assistant v2.0.0 — модульная версия."""
 
 from .app import LLMAssistant
 from .common import DEFAULT_MODEL_NAME

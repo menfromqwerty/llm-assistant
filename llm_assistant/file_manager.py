@@ -1,6 +1,7 @@
 """Загрузка файлов проекта, список файлов и просмотр кода."""
 
-from .common import *
+from .common import *  # noqa: F401,F403
+
 
 class FileManagerMixin:
     PROJECT_EXTENSIONS = {
@@ -16,6 +17,7 @@ class FileManagerMixin:
 
     @staticmethod
     def _zip_member_is_symlink(info: zipfile.ZipInfo) -> bool:
+        # POSIX file type is stored in the upper 16 bits of external_attr.
         return ((info.external_attr >> 16) & 0o170000) == 0o120000
 
     def _safe_extract_zip(self, archive: zipfile.ZipFile, destination: Path) -> List[Path]:
@@ -37,6 +39,8 @@ class FileManagerMixin:
         for info in infos:
             if self._zip_member_is_symlink(info):
                 continue
+            # Backslash заменяется до Path, чтобы Windows-пути нельзя было
+            # использовать для обхода каталога на другой платформе.
             normalized = info.filename.replace("\\", "/")
             relative = Path(normalized)
             if relative.is_absolute() or ".." in relative.parts:
@@ -191,7 +195,7 @@ class FileManagerMixin:
         status: str = "✅",
         select_for_context: bool = False,
     ):
-        del status
+        del status  # статус вычисляется по наличию файла
         self.loaded_files[name] = path
         self._file_context_selected[name] = bool(select_for_context)
         self._cache_file_tokens(name, path)
@@ -246,7 +250,7 @@ class FileManagerMixin:
             self._code_viewer.delete("1.0", tk.END)
             self._code_viewer.insert("1.0", text)
             self._code_tok_label.config(text=f"{name}  ~{tokens:,} токенов")
-            self.nb.select(self.tab_code)
+            self._show_right_tab("code")
         except Exception as exc:
             self._add_msg("system", f"⚠️ {exc}")
 
@@ -289,7 +293,7 @@ class FileManagerMixin:
                 self._code_tok_label.config(
                     text=f"{len(blocks)} блоков  ~{tokens:,} токенов"
                 )
-                self.nb.select(self.tab_code)
+                self._show_right_tab("code")
                 self._status.config(text=f"✅ Извлечено {len(blocks)} блоков кода")
                 return
         self._add_msg("system", "⚠️ Нет блоков кода в последнем ответе")

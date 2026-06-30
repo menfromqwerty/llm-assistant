@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from llm_assistant.sessions import SessionMixin
 
+
 class Var:
     def __init__(self, value):
         self.value = value
@@ -10,15 +11,18 @@ class Var:
     def set(self, value):
         self.value = value
 
+
 class Widget:
     def delete(self, *args):
         pass
     def insert(self, *args):
         pass
 
+
 class Status:
     def config(self, **kwargs):
         self.kwargs = kwargs
+
 
 class Dummy(SessionMixin):
     def __init__(self):
@@ -67,6 +71,7 @@ class Dummy(SessionMixin):
     def _add_msg(self, role, content):
         self.messages.append((role, content))
 
+
 def test_new_session_keeps_ollama_model():
     app = Dummy()
     with patch("llm_assistant.sessions.simpledialog.askstring", return_value="clean"):
@@ -82,6 +87,7 @@ def test_new_session_keeps_ollama_model():
     assert app._context_mode_var.get() == "auto"
     assert app._file_context_budget_var.get() == 32768
     assert app.saved == ["old", "clean"]
+
 
 if __name__ == "__main__":
     test_new_session_keeps_ollama_model()

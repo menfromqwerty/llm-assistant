@@ -3,7 +3,8 @@
 Модуль выделен из монолитного файла v9 для удобства сопровождения.
 """
 
-from .common import *
+from .common import *  # noqa: F401,F403
+
 
 class WebSearchMixin:
     API_ENV_NAMES = {
@@ -59,6 +60,7 @@ class WebSearchMixin:
         ql = query.lower()
         for src, keywords in SOURCE_ROUTING.items():
             if any(kw in ql for kw in keywords):
+                # Проверить доступность источника
                 if src == "tavily" and not self._api_keys.get("tavily"):
                     continue
                 return src
@@ -95,6 +97,7 @@ class WebSearchMixin:
                         self._update_src_indicator(s, "done", n))
                     self.root.after(0, lambda s=src, n=len(results):
                         self._clear_phase(f"✅ {SEARCH_SOURCES[s]['icon']} {SEARCH_SOURCES[s]['name']}: {n} результатов"))
+                    # Автозагрузка первых 3 страниц в фоне
                     for i in range(min(3, len(results))):
                         threading.Thread(
                             target=self._fetch_page_bg, args=(i,), daemon=True
@@ -114,6 +117,7 @@ class WebSearchMixin:
                         fg="#ff6666"))
                 time.sleep(0.3)
 
+        # Все источники исчерпаны
         self.root.after(0, lambda: self._add_msg(
             "system", f"❌ Все источники поиска недоступны.\nПоследняя ошибка: {last_err}\n"
             "Попробуй добавить API ключи (кнопка 🔑) или проверь соединение."))
@@ -123,6 +127,7 @@ class WebSearchMixin:
         """Построить цепочку: primary → остальные по приоритету."""
         order = ["github", "stackoverflow", "tavily", "duckduckgo"]
         chain = [primary] + [s for s in order if s != primary]
+        # Убрать tavily если нет ключа
         if not self._api_keys.get("tavily"):
             chain = [s for s in chain if s != "tavily"]
         return chain
@@ -147,6 +152,7 @@ class WebSearchMixin:
 
         results = []
 
+        # 1) Поиск репозиториев
         r = requests.get(
             "https://api.github.com/search/repositories",
             params={"q": query, "sort": "stars", "per_page": 5},
@@ -167,6 +173,7 @@ class WebSearchMixin:
         elif r.status_code == 403:
             raise Exception("GitHub rate limit. Добавь токен в 🔑 настройки.")
 
+        # 2) Поиск файлов с кодом
         r2 = requests.get(
             "https://api.github.com/search/code",
             params={"q": f"{query} language:python", "per_page": 8},
@@ -211,6 +218,7 @@ class WebSearchMixin:
 
         results = []
         for item in data.get("items", []):
+            # Очистить HTML из body
             body = item.get("body", "")
             if HAS_BS4:
                 body = BeautifulSoup(body, "html.parser").get_text(separator="\n")
@@ -262,6 +270,7 @@ class WebSearchMixin:
                 ))
             return results
         else:
+            # Fallback: прямой HTTP запрос к Tavily API
             r = requests.post(
                 "https://api.tavily.com/search",
                 json={"api_key": key, "query": query,
@@ -364,6 +373,7 @@ class WebSearchMixin:
         win.resizable(False, False)
         win.grab_set()
 
+        # Заголовок
         hdr = tk.Frame(win, bg="#0d1117", pady=12)
         hdr.pack(fill=tk.X)
         tk.Label(hdr, text="🔍 Источники поиска",
@@ -376,7 +386,7 @@ class WebSearchMixin:
         scroll_frame = tk.Frame(win, bg=self.C["bg"])
         scroll_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
 
-        entries = {}
+        entries = {}   # source_key → Entry widget
 
         sources_config = [
             {
@@ -427,22 +437,26 @@ class WebSearchMixin:
         ]
 
         for cfg in sources_config:
+            # Карточка источника
             card = tk.Frame(scroll_frame, bg="#161b22",
                             relief=tk.FLAT, bd=0)
             card.pack(fill=tk.X, pady=6)
 
+            # Левая полоска цвета
             accent_bar = tk.Frame(card, bg=cfg["color"], width=4)
             accent_bar.pack(side=tk.LEFT, fill=tk.Y)
 
             inner = tk.Frame(card, bg="#161b22", padx=12, pady=10)
             inner.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+            # Заголовок карточки
             title_row = tk.Frame(inner, bg="#161b22")
             title_row.pack(fill=tk.X)
             tk.Label(title_row, text=cfg["title"],
                      font=("Segoe UI", 11, "bold"),
                      bg="#161b22", fg=cfg["color"]).pack(side=tk.LEFT)
 
+            # Бейдж «Бесплатно» / «Ключ нужен»
             badge_text  = "✅ Бесплатно"  if cfg["free"]  else "🔑 Нужен ключ"
             badge_color = "#238636"       if cfg["free"]  else "#9e6a03"
             tk.Label(title_row, text=badge_text,
@@ -475,10 +489,12 @@ class WebSearchMixin:
                                  insertbackground="white",
                                  relief=tk.FLAT, width=28, show="•")
                 entry.pack(side=tk.LEFT, padx=(4, 4), ipady=3)
+                # Вставить текущее значение
                 cur = self._api_keys.get(field_key, "")
                 if cur:
                     entry.insert(0, cur)
 
+                # Показать/скрыть ключ
                 def toggle_show(e=entry):
                     e.config(show="" if e.cget("show") == "•" else "•")
 
@@ -488,6 +504,7 @@ class WebSearchMixin:
 
                 entries[field_key] = entry
 
+                # Ссылка для получения ключа
                 link = tk.Label(inner, text=f"🔗 Получить ключ: {link_url}",
                                 font=("Segoe UI", 8),
                                 bg="#161b22", fg="#58a6ff", cursor="hand2")
@@ -498,6 +515,7 @@ class WebSearchMixin:
                          font=("Segoe UI", 8),
                          bg="#161b22", fg="#666").pack(anchor=tk.W, pady=(1, 0))
 
+        # Кнопки внизу
         btn_frame = tk.Frame(win, bg=self.C["bg"], pady=10)
         btn_frame.pack(fill=tk.X, padx=16)
 
@@ -508,6 +526,7 @@ class WebSearchMixin:
                 env_name = self.API_ENV_NAMES.get(field_key)
                 if val and env_name:
                     os.environ[env_name] = val
+            # Обновить статус источников
             self._update_src_indicator(
                 self._search_source_var.get()
                 if self._search_source_var.get() != "auto"
@@ -600,12 +619,14 @@ class WebSearchMixin:
                 for tag in soup(["script", "style", "nav", "footer", "header"]):
                     tag.decompose()
                 text = soup.get_text(separator="\n", strip=True)
+                # Убираем пустые строки
                 lines = [line for line in text.splitlines() if line.strip()]
                 text  = "\n".join(lines)
             else:
+                # Простая очистка без BS4
                 text = re.sub(r"<[^>]+>", " ", resp.text)
                 text = re.sub(r"\s+", " ", text).strip()
-            r.full_text = text[:50000]
+            r.full_text = text[:50000]  # до 50K символов (~12K токенов)
             r.fetched   = True
             self.root.after(0, lambda i=idx: self._refresh_web_list())
             self.root.after(0, self._update_ctx_label)
@@ -672,7 +693,8 @@ class WebSearchMixin:
         self.input_text.insert("1.0",
             f"Проанализируй эту веб-страницу (~{tok} токенов):\n\n"
             f"Заголовок: {r.title}\nURL: {r.url}\n\n{text[:10000]}")
-        self.nb.select(0)
+        self._hide_right_panel()
+        self.input_text.focus_set()
 
     def _web_analyze_llm(self):
         sel = self._web_lb.curselection()
@@ -712,12 +734,12 @@ class WebSearchMixin:
                                      "Введите URL страницы:", parent=self.root)
         if url:
             self._fetch_url(url.strip())
-            self.nb.select(self.tab_web)
+            self._show_right_tab("web")
 
     def _quick_search(self):
         q = simpledialog.askstring("Быстрый поиск", "Поисковый запрос:", parent=self.root)
         if q:
             self._search_entry.delete(0, tk.END)
             self._search_entry.insert(0, q)
-            self.nb.select(self.tab_web)
+            self._show_right_tab("web")
             self._do_search()

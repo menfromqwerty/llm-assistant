@@ -1,179 +1,95 @@
-# 🔒 LLM Assistant v1.01
+# LLM Assistant v2.0.0 — GitHub Clean Release
 
-> **AI for hardware development — your code never leaves your machine.**
+Однооконный локальный LLM-клиент для LM Studio, Ollama, llama.cpp, Jan и OpenAI-совместимых серверов.
 
-Local AI assistant for embedded developers working with STM32, ESP32, AVR, Atmel and other microcontrollers. Runs fully offline via LM Studio, Ollama or llama.cpp. No cloud, no leaks, no subscriptions.
+## Главное в v2.0.0
 
----
+### Единая кнопка Send / Stop
 
-## Why local AI for embedded development?
+Главная кнопка в поле чата меняет режим автоматически:
 
-When you develop firmware for a commercial device, your source code, schematics, proprietary protocols and register maps are confidential. Sending them to ChatGPT, Copilot or any cloud AI means they leave your machine — permanently.
+- `➤ Отправить` — когда генерация не идёт;
+- `■ Остановить` — сразу после запуска модели;
+- повторное нажатие на ту же кнопку закрывает активный HTTP-стрим;
+- `Enter` выполняет текущее действие кнопки;
+- `Esc` останавливает генерацию;
+- `Shift+Enter` вставляет новую строку.
 
-**LLM Assistant keeps everything local:**
+При остановке уже полученная часть ответа остаётся на экране, а исходный запрос
+возвращается в поле ввода, если пользователь ещё не начал вводить новый вариант.
 
-- ✅ Source code stays on your machine
-- ✅ Datasheets and register maps never uploaded anywhere
-- ✅ Works without internet connection
-- ✅ No subscription, no usage limits, no API costs
-- ✅ Safe for NDA projects and commercial firmware
 
----
+На главный экран добавлена компактная панель **CONTROL DECK**:
 
-## Typical tasks
+- Context Length — дискретные пресеты 4K–256K;
+- Max Output — длина ответа;
+- Temperature — вариативность ответа;
+- File Budget — лимит файлового контекста;
+- THINK — режим рассуждения;
+- AUTO CTX — автоматическая синхронизация с сервером;
+- AUTO FIT — подбор минимального подходящего окна;
+- SYNC — чтение фактического Context Length;
+- APPLY — применение выбранного Context Length к серверу;
+- сегментированная полоса `CHAT / FILES / WEB / OUT / FREE`.
 
-- Analyze HAL code for STM32 and generate peripheral drivers
-- Work with ESP32, AVR, Atmel register maps without pasting into a browser
-- Refactor and debug firmware code
-- Explain datasheet sections and register descriptions
-- Write unit tests for embedded code
-- Search GitHub and Stack Overflow for real code examples
+Панель скрывается кнопкой `▤` в верхней строке.
 
----
+## Автоматический Context Length
 
-## Features
+### LM Studio
 
-**🧠 Model switching**
-Switch between local models (Qwen3-Coder-30B, DeepSeek-R1, Llama 3.3) and cloud APIs (Groq free tier) in one click. Default is always `qwen/qwen3-coder-30b`.
+Приложение использует нативный REST API LM Studio:
 
-**📁 Project context**
-Load entire project folders, ZIP archives or individual files. Smart chunking sends only relevant files based on your query — fits within the 262K token context window of Qwen3-Coder-30B.
+- читает загруженный и максимальный контекст;
+- при необходимости выгружает выбранный экземпляр;
+- загружает модель заново с новым `context_length`;
+- не перезагружает модель, если значение уже совпадает.
 
-**🌐 Web search (4 sources)**
-- 🐙 GitHub — real code from repositories
-- 🟠 Stack Overflow — solutions with code
-- 🔷 Tavily — documentation and guides (AI-ready text)
-- 🦆 DuckDuckGo — free fallback, no key needed
+Нужен LM Studio с поддержкой `/api/v1/models`. Если в LM Studio включена авторизация, задайте переменную среды `LM_API_TOKEN`.
 
-Auto-routing picks the best source based on your query keywords. Falls back automatically if a source is unavailable.
+### Ollama
 
-**⚡ Code Viewer**
-Click any code block in chat → opens in Code Viewer. Extract all code blocks from a response to a `.py` file in one click.
+Приложение использует нативный `/api/chat` для предварительной загрузки модели с `options.num_ctx`, а `/api/ps` и `/api/show` — для проверки текущего и максимального окна.
 
-**💾 Sessions**
-Sessions are saved automatically on close to `~/.llm_assistant/sessions/`. Restores chat history, loaded files, model and server settings. Multiple named sessions supported.
+### llama.cpp, Jan и свой сервер
 
-**🌐 Interface language**
-Switch between English, Russian, bilingual and Windows-auto modes instantly — no restart needed.
+Для них панель работает как локальный расчёт и предупреждение. Автоматическое изменение возможно только когда сервер предоставляет специальный API управления моделью.
 
-**🔧 Input tools**
-- Drag-and-drop `.py`, `.c`, `.h` files into the input field → inserted as code blocks
-- Drop a `.zip` → auto-extracted into the project
-- Normalize indentation (tabs → 4 spaces, trailing whitespace removed)
-- Right-click menu: insert file, insert all project files, trim to N tokens
+## Цветовая тема
 
----
+Industrial Terminal:
 
-## Supported local servers
+- тёмный графитово-синий фон;
+- бирюзовые органы управления;
+- зелёные статусы;
+- янтарные предупреждения;
+- яркое жёлтое выделение текста для копирования.
 
-| Server | Default URL | Notes |
-|--------|-------------|-------|
-| LM Studio | `localhost:1234` | Recommended for beginners |
-| Ollama | `localhost:11434` | Good for Linux/Mac |
-| llama.cpp | `localhost:8080` | Lowest resource usage |
-| Jan | `localhost:1337` | GUI alternative |
-| Custom URL | any | Any OpenAI-compatible API |
-
----
-
-## Recommended model
-
-**Qwen3-Coder-30B** (default) — best balance of speed and code quality for local inference.
-
-| Quantization | Size | VRAM | Notes |
-|---|---|---|---|
-| Q4_K_M | ~18 GB | 20 GB | Recommended |
-| Q5_K_M | ~22 GB | 24 GB | Better quality |
-| Q8_0 | ~32 GB | 36 GB | Near-original |
-
-For systems with less VRAM: DeepSeek-R1-7B or Llama-3.2-8B via Ollama.
-
----
-
-## Quick start
+## Запуск
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/llm-assistant.git
-cd llm-assistant
-pip install -r requirements.txt
-python main.py
+cd "D:\LLM Assistant"
+python -m pip install -r requirements.txt
+python -u .\main.py
 ```
 
-**Optional dependencies:**
-```powershell
-pip install -r requirements-optional.txt
-```
-
-1. Start LM Studio and load `qwen/qwen3-coder-30b`
-2. Run `python main.py`
-3. The app connects automatically
-
----
-
-## API keys (optional)
-
-All search sources work without API keys. Keys increase rate limits:
-
-| Source | Without key | With key | Get key |
-|--------|------------|---------|---------|
-| GitHub | 30 req/min | 5000 req/min | [github.com/settings/tokens](https://github.com/settings/tokens) |
-| Stack Overflow | 300 req/day | 10 000 req/day | [stackapps.com](https://stackapps.com/apps/oauth/register) |
-| Tavily | ❌ required | 1000 req/month free | [app.tavily.com](https://app.tavily.com/sign-up) |
-
-Copy `.env.example` to `.env` and insert your values. The file is in `.gitignore` — never committed.
-
----
-
-## Project structure
-
-```
-llm_assistant/
-├── app.py              — main class assembled from mixins
-├── common.py           — constants, dataclasses, shared imports
-├── ui.py               — toolbar, menu, chat panel, layout
-├── llm_client.py       — streaming requests to LLM server
-├── web_search.py       — 4-source search with auto-fallback
-├── file_manager.py     — files, ZIP, folder loading
-├── model_manager.py    — model switcher and profiles
-├── server_manager.py   — server connections and llama.cpp launch
-├── sessions.py         — save/load/list sessions
-├── context_manager.py  — smart file chunking, token budget
-├── input_tools.py      — drag-and-drop, normalize, insert
-├── language_manager.py — EN/RU/bilingual UI localization
-└── utilities.py        — shared helpers
-```
-
----
-
-## Run tests
+## Сборка EXE
 
 ```powershell
-python -m compileall llm_assistant
+powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
+```
+
+Результат:
+
+```text
+dist\LLM_Assistant.exe
+```
+
+## Проверки
+
+```powershell
+python -m compileall .
 pytest -q
 ```
 
----
-
-## Security
-
-- API keys are never stored in session files
-- ZIP extraction is protected against path traversal and ZIP bombs
-- SSRF protection in the web page loader
-- Custom LLM server URL is validated before use
-- No `shell=True` in subprocess calls
-
-See [SECURITY.md](SECURITY.md) and [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md).
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
----
-
-## Author
-
-Built for embedded developers who need AI assistance without cloud exposure.
-
-Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+В проекте сохранены функции v19: копирование любого текста мышью, яркое выделение, остановка генерации, зашифрованные сессии, пароль, умный файловый контекст и веб-поиск.

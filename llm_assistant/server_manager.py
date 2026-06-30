@@ -4,10 +4,15 @@
 Кнопка запуска и диагностика всегда относятся к выбранному серверу.
 """
 
-from .common import *
+from .common import *  # noqa: F401,F403
+
 
 class ServerManagerMixin:
     """Подключение, автоповтор, запуск серверов и диагностика API."""
+
+    # ──────────────────────────────────────────────
+    # Конфигурация и интерфейс
+    # ──────────────────────────────────────────────
 
     def _server_config(self, name: Optional[str] = None) -> Dict[str, object]:
         server_name = name or self._server_var.get()
@@ -37,14 +42,25 @@ class ServerManagerMixin:
             )
 
     def _select_server(self, name: str):
-        """Выбрать сервер, не принуждая использовать модель LM Studio."""
+        """Выбрать сервер и сохранить профиль предыдущей пары сервер+модель."""
         if name not in SERVERS:
             return
+        if hasattr(self, "_save_active_runtime_profile"):
+            self._save_active_runtime_profile()
         self._cancel_connection_retry()
         self._server_url = SERVERS[name]
         self._server_var.set(name)
+        saved_model = self._server_model_selection.get(name)
+        if saved_model:
+            self._model_name = saved_model
+            if hasattr(self, "_restore_runtime_profile"):
+                self._restore_runtime_profile(apply_recommended=False)
         self._available_models = []
+        if hasattr(self, "_update_server_context_badge"):
+            self._update_server_context_badge(None, None, "")
         self._update_server_ui()
+        if hasattr(self, "_update_model_ui"):
+            self._update_model_ui()
         self._check_connection(auto_retry=True, announce=True)
 
     def _custom_server(self):
@@ -75,8 +91,14 @@ class ServerManagerMixin:
         self._server_url = url.strip().rstrip("/")
         self._server_var.set("Свой")
         self._available_models = []
+        if hasattr(self, "_update_server_context_badge"):
+            self._update_server_context_badge(None, None, "")
         self._update_server_ui()
         self._check_connection(auto_retry=True, announce=True)
+
+    # ──────────────────────────────────────────────
+    # Получение списка моделей
+    # ──────────────────────────────────────────────
 
     def _ollama_native_base(self, url: str) -> str:
         parsed = urlparse(url)
@@ -140,6 +162,7 @@ class ServerManagerMixin:
         if server_name == "LM Studio" and DEFAULT_MODEL_NAME in models:
             return DEFAULT_MODEL_NAME
 
+        # Не выбираем embedding-модель как модель чата, если есть альтернатива.
         chat_models = [
             model for model in models
             if not any(word in model.lower() for word in ("embed", "embedding"))
@@ -162,6 +185,10 @@ class ServerManagerMixin:
         if changed:
             self._set_model(selected, apply_profile=True)
         return selected if changed else None
+
+    # ──────────────────────────────────────────────
+    # Проверка соединения и автоповтор
+    # ──────────────────────────────────────────────
 
     def _check_connection(self, auto_retry: bool = True, announce: bool = True):
         if self._shutdown_requested or self._connection_check_running:
@@ -252,7 +279,9 @@ class ServerManagerMixin:
         if self._shutdown_requested:
             return
 
+        # Игнорируем устаревший результат, если пользователь уже сменил сервер.
         if name != self._server_var.get() or url != self._server_url.rstrip("/"):
+            # Пользователь сменил провайдера, пока предыдущая проверка была в сети.
             self.root.after(
                 50,
                 lambda: self._check_connection(auto_retry=True, announce=True),
@@ -282,6 +311,8 @@ class ServerManagerMixin:
                 )
             if not models:
                 self._show_empty_model_hint(name)
+            elif hasattr(self, "_sync_server_context_async"):
+                self.root.after(120, lambda: self._sync_server_context_async(announce=False))
             return
 
         self._last_connection_error = f"{reason}\n{details}".strip()
@@ -365,6 +396,10 @@ class ServerManagerMixin:
         self._cancel_retry_timer_only()
         self._connection_retry_active = False
         self._connection_retry_attempts = 0
+
+    # ──────────────────────────────────────────────
+    # Запуск выбранного сервера
+    # ──────────────────────────────────────────────
 
     def _start_selected_server(self):
         name = self._server_var.get()
@@ -502,6 +537,7 @@ class ServerManagerMixin:
                             if ok
                             else "Процесс запущен, ожидается открытие порта 11434."
                         )
+                        # Даже если порт ещё не успел открыться, автоповтор проверит его.
                         if process.poll() is None:
                             ok = True
                     except Exception as exc:
@@ -665,6 +701,7 @@ class ServerManagerMixin:
             self._check_connection(auto_retry=True, announce=True)
             return
 
+        # Desktop API Jan запускается из его настроек. Попробуем открыть приложение.
         local = Path(os.environ.get("LOCALAPPDATA", ""))
         candidates = [
             local / "Programs" / "Jan" / "Jan.exe",
@@ -702,6 +739,9 @@ class ServerManagerMixin:
         )
         is_batch = os.name == "nt" and executable.lower().endswith((".cmd", ".bat"))
         if is_batch:
+            # Batch-файлы нельзя выполнить напрямую через CreateProcess. Запускаем
+            # системный cmd.exe без shell=True; executable найден через shutil.which,
+            # а аргументы передаются как заранее сформированный список.
             comspec = os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe")
             command = [
                 comspec, "/d", "/s", "/c",
@@ -730,6 +770,10 @@ class ServerManagerMixin:
             return False, f"Команда не завершилась за {timeout} секунд."
         except Exception as exc:
             return False, f"{type(exc).__name__}: {exc}"
+
+    # ──────────────────────────────────────────────
+    # Диагностика
+    # ──────────────────────────────────────────────
 
     def _diagnose_connection_failure(
         self,
@@ -888,6 +932,319 @@ class ServerManagerMixin:
             f"Ошибка API {server}: HTTP {status_code}",
             raw[:1500] or "Сервер не передал описание ошибки.",
         )
+
+    # ──────────────────────────────────────────────
+    # Реальный Context Length сервера
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def _native_base(url: str) -> str:
+        parsed = urlparse(url)
+        scheme = parsed.scheme or "http"
+        netloc = parsed.netloc
+        if not netloc:
+            netloc = parsed.path.split("/")[0]
+        return f"{scheme}://{netloc}".rstrip("/")
+
+    @staticmethod
+    def _lmstudio_headers() -> Dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        token = os.environ.get("LM_API_TOKEN", "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+    @staticmethod
+    def _model_name_matches(candidate: str, selected: str) -> bool:
+        left = (candidate or "").strip().lower()
+        right = (selected or "").strip().lower()
+        if not left or not right:
+            return False
+        if left == right:
+            return True
+        return left.split("/")[-1] == right.split("/")[-1]
+
+    def _inspect_lmstudio_context(self, model_name: str, url: str) -> Dict[str, object]:
+        base = self._native_base(url)
+        response = requests.get(
+            f"{base}/api/v1/models",
+            headers=self._lmstudio_headers(), timeout=(4, 20),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        models = payload.get("models", []) if isinstance(payload, dict) else []
+
+        best = None
+        best_instance = None
+        for model in models:
+            if not isinstance(model, dict):
+                continue
+            key = str(model.get("key") or "")
+            display = str(model.get("display_name") or "")
+            instances = model.get("loaded_instances") or []
+            for instance in instances:
+                if not isinstance(instance, dict):
+                    continue
+                instance_id = str(instance.get("id") or "")
+                if self._model_name_matches(instance_id, model_name):
+                    best, best_instance = model, instance
+                    break
+            if best is not None:
+                break
+            if self._model_name_matches(key, model_name) or self._model_name_matches(display, model_name):
+                best = model
+                if instances and isinstance(instances[0], dict):
+                    best_instance = instances[0]
+                break
+
+        if best is None:
+            return {
+                "server": "LM Studio", "supported": True,
+                "loaded": None, "maximum": None,
+                "model_key": model_name, "instance_id": None,
+            }
+
+        config = (best_instance or {}).get("config") or {}
+        loaded = config.get("context_length")
+        maximum = best.get("max_context_length")
+        return {
+            "server": "LM Studio",
+            "supported": True,
+            "loaded": int(loaded) if isinstance(loaded, (int, float)) else None,
+            "maximum": int(maximum) if isinstance(maximum, (int, float)) else None,
+            "model_key": str(best.get("key") or model_name),
+            "instance_id": str((best_instance or {}).get("id") or "") or None,
+        }
+
+    def _inspect_ollama_context(self, model_name: str, url: str) -> Dict[str, object]:
+        base = self._ollama_native_base(url)
+        loaded = None
+        ps_response = requests.get(f"{base}/api/ps", timeout=(4, 20))
+        if ps_response.status_code == 200:
+            for item in ps_response.json().get("models", []):
+                if not isinstance(item, dict):
+                    continue
+                candidate = str(item.get("name") or item.get("model") or "")
+                if self._model_name_matches(candidate, model_name):
+                    value = item.get("context_length")
+                    if isinstance(value, (int, float)):
+                        loaded = int(value)
+                    break
+
+        maximum = None
+        show_response = requests.post(
+            f"{base}/api/show", json={"model": model_name, "verbose": False},
+            timeout=(4, 30),
+        )
+        if show_response.status_code == 200:
+            model_info = show_response.json().get("model_info", {})
+            candidates = [
+                int(value) for key, value in model_info.items()
+                if str(key).endswith(".context_length")
+                and isinstance(value, (int, float))
+            ]
+            if candidates:
+                maximum = max(candidates)
+            parameters = str(show_response.json().get("parameters") or "")
+            match = re.search(r"(?:^|\n)\s*num_ctx\s+(\d+)", parameters)
+            if loaded is None and match:
+                loaded = int(match.group(1))
+        elif show_response.status_code not in (404,):
+            show_response.raise_for_status()
+
+        return {
+            "server": "Ollama", "supported": True,
+            "loaded": loaded, "maximum": maximum,
+            "model_key": model_name, "instance_id": model_name,
+        }
+
+    def _inspect_server_context(
+        self,
+        server_name: Optional[str] = None,
+        model_name: Optional[str] = None,
+        url: Optional[str] = None,
+    ) -> Dict[str, object]:
+        name = server_name or self._server_var.get()
+        model = model_name or self._model_name
+        base_url = url or self._server_url
+        if name == "LM Studio":
+            return self._inspect_lmstudio_context(model, base_url)
+        if name == "Ollama":
+            return self._inspect_ollama_context(model, base_url)
+        return {
+            "server": name, "supported": False,
+            "loaded": None, "maximum": None,
+            "model_key": model, "instance_id": None,
+        }
+
+    def _sync_server_context_async(self, announce: bool = False):
+        if getattr(self, "_server_context_sync_running", False):
+            return
+        self._server_context_sync_running = True
+        server_name = self._server_var.get()
+        model_name = self._model_name
+        server_url = self._server_url
+        if hasattr(self, "_server_ctx_label"):
+            self._server_ctx_label.config(text="SERVER CTX: SCAN...", fg=self.C["accent"])
+
+        def worker():
+            try:
+                info = self._inspect_server_context(server_name, model_name, server_url)
+                error = ""
+            except Exception as exc:
+                info = {"loaded": None, "maximum": None, "model_key": model_name}
+                error = f"{type(exc).__name__}: {exc}"
+            self.root.after(0, lambda: finish(info, error))
+
+        def finish(info: Dict[str, object], error: str):
+            self._server_context_sync_running = False
+            self._update_server_context_badge(
+                info.get("loaded"), info.get("maximum"), str(info.get("model_key") or model_name)
+            )
+            if error:
+                self._status.config(text=f"⚠ Не удалось получить Context Length: {error}")
+                return
+            loaded = info.get("loaded")
+            maximum = info.get("maximum")
+            if loaded and self._auto_context_var.get():
+                self._context_window_var.set(int(loaded))
+                self._on_generation_limits_changed()
+            if announce:
+                if loaded:
+                    self._status.config(
+                        text=f"SERVER CTX {int(loaded):,} · MAX {int(maximum):,}" if maximum
+                        else f"SERVER CTX {int(loaded):,}"
+                    )
+                elif info.get("supported"):
+                    self._status.config(text="Модель найдена, но сейчас не загружена")
+                else:
+                    self._status.config(text=f"{server_name}: автоматическое управление контекстом не поддерживается")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_context_to_server(
+        self,
+        target: int,
+        server_name: Optional[str] = None,
+        model_name: Optional[str] = None,
+        server_url: Optional[str] = None,
+    ) -> Dict[str, object]:
+        server_name = server_name or self._server_var.get()
+        model_name = model_name or self._model_name
+        server_url = server_url or self._server_url
+        target = max(2048, min(int(target), MAX_CONTEXT_TOKENS))
+
+        if server_name == "LM Studio":
+            info = self._inspect_lmstudio_context(model_name, server_url)
+            maximum = info.get("maximum")
+            if maximum:
+                target = min(target, int(maximum))
+            if info.get("loaded") == target:
+                return info
+            base = self._native_base(server_url)
+            headers = self._lmstudio_headers()
+            instance_id = info.get("instance_id")
+            if instance_id:
+                unload = requests.post(
+                    f"{base}/api/v1/models/unload", headers=headers,
+                    json={"instance_id": instance_id}, timeout=(5, 120),
+                )
+                unload.raise_for_status()
+            load = requests.post(
+                f"{base}/api/v1/models/load", headers=headers,
+                json={
+                    "model": info.get("model_key") or model_name,
+                    "context_length": target,
+                    "echo_load_config": True,
+                },
+                timeout=(10, 900),
+            )
+            load.raise_for_status()
+            data = load.json() if load.content else {}
+            load_config = data.get("load_config", {}) if isinstance(data, dict) else {}
+            return {
+                "server": "LM Studio",
+                "supported": True,
+                "loaded": int(load_config.get("context_length") or target),
+                "maximum": maximum,
+                "model_key": str(info.get("model_key") or model_name),
+                "instance_id": str(data.get("instance_id") or "") or None,
+            }
+
+        if server_name == "Ollama":
+            info = self._inspect_ollama_context(model_name, server_url)
+            maximum = info.get("maximum")
+            if maximum:
+                target = min(target, int(maximum))
+            if info.get("loaded") == target:
+                return info
+            base = self._ollama_native_base(server_url)
+            preload = requests.post(
+                f"{base}/api/chat",
+                json={
+                    "model": model_name,
+                    "messages": [],
+                    "stream": False,
+                    "keep_alive": -1,
+                    "options": {"num_ctx": target},
+                },
+                timeout=(10, 900),
+            )
+            preload.raise_for_status()
+            result = self._inspect_ollama_context(model_name, server_url)
+            if result.get("loaded") is None:
+                result["loaded"] = target
+            return result
+
+        raise RuntimeError(
+            f"Для сервера {server_name} доступна только локальная проверка лимита."
+        )
+
+    def _apply_context_to_server_async(self, target: int):
+        if getattr(self, "_server_context_apply_running", False):
+            return
+        self._server_context_apply_running = True
+        server_name = self._server_var.get()
+        model_name = self._model_name
+        self._status.config(text=f"Применение Context Length {int(target):,} к {server_name}...")
+        if hasattr(self, "_server_ctx_label"):
+            self._server_ctx_label.config(text="SERVER CTX: APPLY...", fg=self.C["gold"])
+
+        server_url = self._server_url
+
+        def worker():
+            try:
+                info = self._apply_context_to_server(
+                    target,
+                    server_name=server_name,
+                    model_name=model_name,
+                    server_url=server_url,
+                )
+                error = ""
+            except Exception as exc:
+                info = {"loaded": None, "maximum": None, "model_key": model_name}
+                error = f"{type(exc).__name__}: {exc}"
+            self.root.after(0, lambda: finish(info, error))
+
+        def finish(info: Dict[str, object], error: str):
+            self._server_context_apply_running = False
+            self._update_server_context_badge(
+                info.get("loaded"), info.get("maximum"), str(info.get("model_key") or model_name)
+            )
+            if error:
+                self._status.config(text=f"❌ Context Length не применён: {error}")
+                messagebox.showerror(
+                    "Context Length",
+                    f"Не удалось изменить контекст сервера:\n\n{error}",
+                    parent=self.root,
+                )
+                return
+            loaded = int(info.get("loaded") or target)
+            self._context_window_var.set(loaded)
+            self._on_generation_limits_changed()
+            self._status.config(text=f"✅ {server_name}: Context Length = {loaded:,}")
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _ensure_selected_model_exists(
         self,

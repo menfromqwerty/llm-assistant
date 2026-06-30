@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "local-llm-assistant"
-version = "1.01"
+version = "2.0.0"
 description = "Local desktop assistant for OpenAI-compatible LLM servers"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,6 +30,7 @@ dependencies = [
   "beautifulsoup4>=4.12,<5",
   "duckduckgo-search>=7,<9",
   "tkinterdnd2>=0.4,<1",
+  "cryptography>=43,<48",
 ]
 
 [project.optional-dependencies]
