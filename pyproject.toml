@@ -30,7 +30,7 @@ dependencies = [
   "beautifulsoup4>=4.12,<5",
   "duckduckgo-search>=7,<9",
   "tkinterdnd2>=0.4,<1",
-  "cryptography>=43,<48",
+  "cryptography>=43,<50",
 ]
 
 [project.optional-dependencies]
